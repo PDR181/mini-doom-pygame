@@ -14,6 +14,7 @@ pygame.mouse.set_visible(False)
 pygame.event.set_grab(True)
 
 clock = pygame.time.Clock()
+font = pygame.font.SysFont("arial", 24)
 
 player_x = 150
 player_y = 150
@@ -22,6 +23,7 @@ player_pitch = 0
 
 player_speed = 3
 mouse_sensitivity = 0.003
+player_health = 100
 
 TILE_SIZE = 50
 
@@ -42,7 +44,8 @@ SHOOT_DURATION = 8
 enemy_x = 400
 enemy_y = 250
 enemy_alive = True
-enemy_size = 20
+enemy_speed = 1.2
+enemy_damage_cooldown = 0
 
 game_map = [
     "111111111111",
@@ -155,6 +158,36 @@ def draw_enemy(horizon_y):
             )
         )
 
+def move_enemy():
+    global enemy_x, enemy_y, player_health, enemy_damage_cooldown
+
+    if not enemy_alive:
+        return
+
+    dx = player_x - enemy_x
+    dy = player_y - enemy_y
+    distance = math.sqrt(dx * dx + dy * dy)
+
+    if distance > 0:
+        move_x = (dx / distance) * enemy_speed
+        move_y = (dy / distance) * enemy_speed
+
+        new_enemy_x = enemy_x + move_x
+        new_enemy_y = enemy_y + move_y
+
+        if not wall_collision(new_enemy_x, enemy_y):
+            enemy_x = new_enemy_x
+
+        if not wall_collision(enemy_x, new_enemy_y):
+            enemy_y = new_enemy_y
+
+    if enemy_damage_cooldown > 0:
+        enemy_damage_cooldown -= 1
+
+    if distance < 25 and enemy_damage_cooldown == 0:
+        player_health -= 10
+        enemy_damage_cooldown = 30
+
 def draw_minimap():
     for row_index, row in enumerate(game_map):
         for col_index, tile in enumerate(row):
@@ -232,6 +265,10 @@ def draw_weapon():
         pygame.draw.circle(screen, (255, 220, 100), (flash_x, flash_y), flash_size)
         pygame.draw.circle(screen, (255, 255, 180), (flash_x, flash_y), flash_size // 2)
 
+def draw_hud():
+    health_text = font.render(f"Vida: {player_health}", True, (255, 255, 255))
+    screen.blit(health_text, (10, HEIGHT - 35))
+
 def shoot_enemy():
     global enemy_alive
 
@@ -298,6 +335,8 @@ while running:
         player_x = new_x
         player_y = new_y
 
+    move_enemy()
+
     if shooting:
         shoot_timer -= 1
         if shoot_timer <= 0:
@@ -316,6 +355,11 @@ while running:
     draw_minimap()
     draw_crosshair()
     draw_weapon()
+    draw_hud()
+
+    if player_health <= 0:
+        game_over_text = font.render("GAME OVER", True, (255, 50, 50))
+        screen.blit(game_over_text, (WIDTH // 2 - 70, HEIGHT // 2 - 20))
 
     pygame.display.update()
     clock.tick(60)
