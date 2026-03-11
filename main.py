@@ -10,14 +10,18 @@ HEIGHT = 600
 screen = pygame.display.set_mode((WIDTH, HEIGHT))
 pygame.display.set_caption("Mini Doom")
 
+pygame.mouse.set_visible(False)
+pygame.event.set_grab(True)
+
 clock = pygame.time.Clock()
 
 player_x = 150
 player_y = 150
 player_angle = 0
+player_pitch = 0
 
 player_speed = 3
-rotation_speed = 0.05
+mouse_sensitivity = 0.003
 
 TILE_SIZE = 50
 
@@ -129,12 +133,14 @@ while running:
         if event.type == pygame.QUIT:
             running = False
 
-    keys = pygame.key.get_pressed()
+    mouse_dx, mouse_dy = pygame.mouse.get_rel()
 
-    if keys[pygame.K_LEFT]:
-        player_angle -= rotation_speed
-    if keys[pygame.K_RIGHT]:
-        player_angle += rotation_speed
+    player_angle += mouse_dx * mouse_sensitivity
+    player_pitch += mouse_dy * mouse_sensitivity
+
+    player_pitch = max(-0.5, min(0.5, player_pitch))
+
+    keys = pygame.key.get_pressed()
 
     new_x = player_x
     new_y = player_y
@@ -170,5 +176,7 @@ while running:
     pygame.display.update()
     clock.tick(60)
 
+pygame.event.set_grab(False)
+pygame.mouse.set_visible(True)
 pygame.quit()
 sys.exit()
