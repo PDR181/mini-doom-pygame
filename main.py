@@ -35,6 +35,15 @@ SCALE = WIDTH // NUM_RAYS
 
 MINIMAP_SCALE = 0.2
 
+shooting = False
+shoot_timer = 0
+SHOOT_DURATION = 8
+
+enemy_x = 400
+enemy_y = 250
+enemy_alive = True
+enemy_size = 20
+
 game_map = [
     "111111111111",
     "100000000001",
@@ -56,7 +65,7 @@ def wall_collision(x, y):
 
     return game_map[map_y][map_x] == "1"
 
-def cast_rays():
+def cast_rays(horizon_y):
     start_angle = player_angle - HALF_FOV
 
     for ray in range(NUM_RAYS):
@@ -73,11 +82,10 @@ def cast_rays():
                 break
 
             if game_map[row][col] == "1":
-                depth *= math.cos(player_angle - ray_angle)
+                corrected_depth = depth * math.cos(player_angle - ray_angle)
+                wall_height = (TILE_SIZE / (corrected_depth + 0.0001)) * SCREEN_DIST
 
-                wall_height = (TILE_SIZE / (depth + 0.0001)) * SCREEN_DIST
-
-                color_value = max(20, 255 - depth // 2)
+                color_value = max(20, 255 - corrected_depth // 2)
                 color = (color_value, color_value, color_value)
 
                 pygame.draw.rect(
@@ -85,12 +93,67 @@ def cast_rays():
                     color,
                     (
                         ray * SCALE,
-                        HEIGHT // 2 - wall_height // 2,
+                        horizon_y - wall_height // 2,
                         SCALE,
                         wall_height
                     )
                 )
                 break
+
+def draw_enemy(horizon_y):
+    if not enemy_alive:
+        return
+
+    dx = enemy_x - player_x
+    dy = enemy_y - player_y
+
+    distance = math.sqrt(dx * dx + dy * dy)
+
+    enemy_angle = math.atan2(dy, dx) - player_angle
+
+    while enemy_angle > math.pi:
+        enemy_angle -= 2 * math.pi
+    while enemy_angle < -math.pi:
+        enemy_angle += 2 * math.pi
+
+    if -HALF_FOV < enemy_angle < HALF_FOV and distance > 20:
+        screen_x = (WIDTH // 2) + (enemy_angle / DELTA_ANGLE) * SCALE
+
+        size = min(300, int(SCREEN_DIST / (distance + 0.0001) * 40))
+        screen_y = horizon_y - size // 2
+
+        pygame.draw.rect(
+            screen,
+            (200, 50, 50),
+            (
+                int(screen_x - size // 2),
+                int(screen_y),
+                size,
+                size
+            )
+        )
+
+        pygame.draw.rect(
+            screen,
+            (255, 220, 220),
+            (
+                int(screen_x - size // 4),
+                int(screen_y + size // 5),
+                size // 6,
+                size // 6
+            )
+        )
+
+        pygame.draw.rect(
+            screen,
+            (255, 220, 220),
+            (
+                int(screen_x + size // 10),
+                int(screen_y + size // 5),
+                size // 6,
+                size // 6
+            )
+        )
 
 def draw_minimap():
     for row_index, row in enumerate(game_map):
@@ -107,6 +170,14 @@ def draw_minimap():
                     TILE_SIZE * MINIMAP_SCALE
                 )
             )
+
+    if enemy_alive:
+        pygame.draw.circle(
+            screen,
+            (255, 0, 0),
+            (int(enemy_x * MINIMAP_SCALE), int(enemy_y * MINIMAP_SCALE)),
+            4
+        )
 
     pygame.draw.circle(
         screen,
@@ -126,17 +197,79 @@ def draw_minimap():
         2
     )
 
+def draw_crosshair():
+    center_x = WIDTH // 2
+    center_y = HEIGHT // 2
+
+    pygame.draw.line(screen, (255, 255, 255), (center_x - 10, center_y), (center_x + 10, center_y), 2)
+    pygame.draw.line(screen, (255, 255, 255), (center_x, center_y - 10), (center_x, center_y + 10), 2)
+
+def draw_weapon():
+    weapon_width = 140
+    weapon_height = 90
+
+    weapon_x = WIDTH // 2 - weapon_width // 2
+    weapon_y = HEIGHT - weapon_height - 20
+
+    if shooting:
+        weapon_y += 10
+
+    pygame.draw.rect(screen, (80, 80, 80), (weapon_x, weapon_y, weapon_width, weapon_height))
+    pygame.draw.rect(screen, (40, 40, 40), (weapon_x + 20, weapon_y + 20, 100, 50))
+
+    barrel_width = 30
+    barrel_height = 60
+    barrel_x = WIDTH // 2 - barrel_width // 2
+    barrel_y = weapon_y - 20
+
+    pygame.draw.rect(screen, (120, 120, 120), (barrel_x, barrel_y, barrel_width, barrel_height))
+
+    if shooting:
+        flash_size = 20
+        flash_x = WIDTH // 2
+        flash_y = barrel_y - 10
+
+        pygame.draw.circle(screen, (255, 220, 100), (flash_x, flash_y), flash_size)
+        pygame.draw.circle(screen, (255, 255, 180), (flash_x, flash_y), flash_size // 2)
+
+def shoot_enemy():
+    global enemy_alive
+
+    if not enemy_alive:
+        return
+
+    dx = enemy_x - player_x
+    dy = enemy_y - player_y
+
+    distance = math.sqrt(dx * dx + dy * dy)
+    enemy_angle = math.atan2(dy, dx) - player_angle
+
+    while enemy_angle > math.pi:
+        enemy_angle -= 2 * math.pi
+    while enemy_angle < -math.pi:
+        enemy_angle += 2 * math.pi
+
+    aim_tolerance = 0.08
+
+    if abs(enemy_angle) < aim_tolerance and distance < 500:
+        enemy_alive = False
+
 running = True
 while running:
-
     for event in pygame.event.get():
         if event.type == pygame.QUIT:
             running = False
 
+        if event.type == pygame.MOUSEBUTTONDOWN:
+            if event.button == 1 and not shooting:
+                shooting = True
+                shoot_timer = SHOOT_DURATION
+                shoot_enemy()
+
     mouse_dx, mouse_dy = pygame.mouse.get_rel()
 
     player_angle += mouse_dx * mouse_sensitivity
-    player_pitch += mouse_dy * mouse_sensitivity
+    player_pitch -= mouse_dy * mouse_sensitivity
 
     player_pitch = max(-0.5, min(0.5, player_pitch))
 
@@ -165,13 +298,24 @@ while running:
         player_x = new_x
         player_y = new_y
 
+    if shooting:
+        shoot_timer -= 1
+        if shoot_timer <= 0:
+            shooting = False
+
+    horizon_offset = int(player_pitch * 200)
+    horizon_y = HEIGHT // 2 + horizon_offset
+
     screen.fill((0, 0, 0))
 
-    pygame.draw.rect(screen, (30, 30, 30), (0, 0, WIDTH, HEIGHT // 2))
-    pygame.draw.rect(screen, (60, 60, 60), (0, HEIGHT // 2, WIDTH, HEIGHT // 2))
+    pygame.draw.rect(screen, (30, 30, 30), (0, 0, WIDTH, horizon_y))
+    pygame.draw.rect(screen, (60, 60, 60), (0, horizon_y, WIDTH, HEIGHT - horizon_y))
 
-    cast_rays()
+    cast_rays(horizon_y)
+    draw_enemy(horizon_y)
     draw_minimap()
+    draw_crosshair()
+    draw_weapon()
 
     pygame.display.update()
     clock.tick(60)
