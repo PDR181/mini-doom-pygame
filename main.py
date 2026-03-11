@@ -21,6 +21,14 @@ rotation_speed = 0.05
 
 TILE_SIZE = 50
 
+FOV = math.pi / 3
+HALF_FOV = FOV / 2
+NUM_RAYS = 120
+MAX_DEPTH = 800
+DELTA_ANGLE = FOV / NUM_RAYS
+SCREEN_DIST = (WIDTH / 2) / math.tan(HALF_FOV)
+SCALE = WIDTH // NUM_RAYS
+
 game_map = [
     "111111111111",
     "100000000001",
@@ -41,6 +49,42 @@ def wall_collision(x, y):
         return True
 
     return game_map[map_y][map_x] == "1"
+
+def cast_rays():
+    start_angle = player_angle - HALF_FOV
+
+    for ray in range(NUM_RAYS):
+        ray_angle = start_angle + ray * DELTA_ANGLE
+
+        for depth in range(1, MAX_DEPTH):
+            target_x = player_x + math.cos(ray_angle) * depth
+            target_y = player_y + math.sin(ray_angle) * depth
+
+            col = int(target_x / TILE_SIZE)
+            row = int(target_y / TILE_SIZE)
+
+            if row < 0 or row >= len(game_map) or col < 0 or col >= len(game_map[0]):
+                break
+
+            if game_map[row][col] == "1":
+                depth *= math.cos(player_angle - ray_angle)
+
+                wall_height = (TILE_SIZE / (depth + 0.0001)) * SCREEN_DIST
+
+                color_value = max(20, 255 - depth // 2)
+                color = (color_value, color_value, color_value)
+
+                pygame.draw.rect(
+                    screen,
+                    color,
+                    (
+                        ray * SCALE,
+                        HEIGHT // 2 - wall_height // 2,
+                        SCALE,
+                        wall_height
+                    )
+                )
+                break
 
 running = True
 while running:
@@ -71,28 +115,12 @@ while running:
         player_x = new_x
         player_y = new_y
 
-    screen.fill((30, 30, 30))
+    screen.fill((0, 0, 0))
 
-    for row_index, row in enumerate(game_map):
-        for col_index, tile in enumerate(row):
-            if tile == "1":
-                pygame.draw.rect(
-                    screen,
-                    (200, 200, 200),
-                    (
-                        col_index * TILE_SIZE,
-                        row_index * TILE_SIZE,
-                        TILE_SIZE,
-                        TILE_SIZE
-                    )
-                )
+    pygame.draw.rect(screen, (30, 30, 30), (0, 0, WIDTH, HEIGHT // 2))
+    pygame.draw.rect(screen, (60, 60, 60), (0, HEIGHT // 2, WIDTH, HEIGHT // 2))
 
-    pygame.draw.circle(screen, (255, 255, 0), (int(player_x), int(player_y)), 8)
-
-    line_x = player_x + math.cos(player_angle) * 40
-    line_y = player_y + math.sin(player_angle) * 40
-
-    pygame.draw.line(screen, (255, 0, 0), (player_x, player_y), (line_x, line_y), 3)
+    cast_rays()
 
     pygame.display.update()
     clock.tick(60)
