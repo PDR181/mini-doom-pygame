@@ -46,6 +46,8 @@ enemy_y = 250
 enemy_alive = True
 enemy_speed = 1.2
 enemy_damage_cooldown = 0
+enemy_health = 100
+enemy_max_health = 100
 
 game_map = [
     "111111111111",
@@ -111,7 +113,6 @@ def draw_enemy(horizon_y):
     dy = enemy_y - player_y
 
     distance = math.sqrt(dx * dx + dy * dy)
-
     enemy_angle = math.atan2(dy, dx) - player_angle
 
     while enemy_angle > math.pi:
@@ -125,16 +126,14 @@ def draw_enemy(horizon_y):
         size = min(300, int(SCREEN_DIST / (distance + 0.0001) * 40))
         screen_y = horizon_y - size // 2
 
-        pygame.draw.rect(
-            screen,
-            (200, 50, 50),
-            (
-                int(screen_x - size // 2),
-                int(screen_y),
-                size,
-                size
-            )
+        enemy_rect = pygame.Rect(
+            int(screen_x - size // 2),
+            int(screen_y),
+            size,
+            size
         )
+
+        pygame.draw.rect(screen, (200, 50, 50), enemy_rect)
 
         pygame.draw.rect(
             screen,
@@ -157,6 +156,16 @@ def draw_enemy(horizon_y):
                 size // 6
             )
         )
+
+        bar_width = size
+        bar_height = 8
+        bar_x = int(screen_x - size // 2)
+        bar_y = int(screen_y - 15)
+
+        pygame.draw.rect(screen, (60, 0, 0), (bar_x, bar_y, bar_width, bar_height))
+
+        current_bar_width = int((enemy_health / enemy_max_health) * bar_width)
+        pygame.draw.rect(screen, (0, 200, 0), (bar_x, bar_y, current_bar_width, bar_height))
 
 def move_enemy():
     global enemy_x, enemy_y, player_health, enemy_damage_cooldown
@@ -270,7 +279,7 @@ def draw_hud():
     screen.blit(health_text, (10, HEIGHT - 35))
 
 def shoot_enemy():
-    global enemy_alive
+    global enemy_alive, enemy_health
 
     if not enemy_alive:
         return
@@ -289,7 +298,10 @@ def shoot_enemy():
     aim_tolerance = 0.08
 
     if abs(enemy_angle) < aim_tolerance and distance < 500:
-        enemy_alive = False
+        enemy_health -= 25
+        if enemy_health <= 0:
+            enemy_health = 0
+            enemy_alive = False
 
 running = True
 while running:
