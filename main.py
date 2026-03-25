@@ -51,6 +51,10 @@ spawn_timer = 0
 SPAWN_INTERVAL = 180
 MAX_ENEMIES = 6
 
+wave = 1
+wave_timer = 0
+WAVE_DURATION = 600
+
 enemies = [
     {"x": 400, "y": 250, "health": 100, "max_health": 100, "alive": True, "cooldown": 0}
 ]
@@ -186,6 +190,18 @@ def spawn_enemy():
                 "cooldown": 0
             })
             break
+
+def update_wave():
+    global wave, wave_timer, SPAWN_INTERVAL, enemy_speed
+
+    wave_timer += 1
+
+    if wave_timer >= WAVE_DURATION:
+        wave += 1
+        wave_timer = 0
+
+        SPAWN_INTERVAL = max(60, SPAWN_INTERVAL - 15)
+        enemy_speed += 0.1
 
 def draw_enemies(horizon_y):
     visible_enemies = []
@@ -339,10 +355,12 @@ def draw_hud():
     enemies_alive = sum(1 for enemy in enemies if enemy["alive"])
     enemy_text = font.render(f"Inimigos: {enemies_alive}", True, (255, 255, 255))
     score_text = font.render(f"Pontos: {score}", True, (255, 255, 255))
+    wave_text = font.render(f"Wave: {wave}", True, (255, 255, 255))
 
     screen.blit(health_text, (10, HEIGHT - 35))
     screen.blit(enemy_text, (10, HEIGHT - 65))
     screen.blit(score_text, (10, HEIGHT - 95))
+    screen.blit(wave_text, (10, HEIGHT - 125))
 
 def shoot_enemy():
     global score
@@ -424,6 +442,7 @@ while running:
         player_y = new_y
 
     move_enemies()
+    update_wave()
 
     spawn_timer += 1
     if spawn_timer >= SPAWN_INTERVAL:
