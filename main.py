@@ -24,6 +24,7 @@ player_pitch = 0
 player_speed = 3
 mouse_sensitivity = 0.003
 player_health = 100
+score = 0
 
 TILE_SIZE = 50
 
@@ -337,11 +338,15 @@ def draw_hud():
     health_text = font.render(f"Vida: {player_health}", True, (255, 255, 255))
     enemies_alive = sum(1 for enemy in enemies if enemy["alive"])
     enemy_text = font.render(f"Inimigos: {enemies_alive}", True, (255, 255, 255))
+    score_text = font.render(f"Pontos: {score}", True, (255, 255, 255))
 
     screen.blit(health_text, (10, HEIGHT - 35))
     screen.blit(enemy_text, (10, HEIGHT - 65))
+    screen.blit(score_text, (10, HEIGHT - 95))
 
 def shoot_enemy():
+    global score
+
     visible_targets = []
 
     for enemy in enemies:
@@ -372,6 +377,7 @@ def shoot_enemy():
         if enemy["health"] <= 0:
             enemy["health"] = 0
             enemy["alive"] = False
+            score += 100
 
 running = True
 while running:
