@@ -41,13 +41,18 @@ shooting = False
 shoot_timer = 0
 SHOOT_DURATION = 8
 
-enemy_x = 400
-enemy_y = 250
-enemy_alive = True
 enemy_speed = 1.2
-enemy_damage_cooldown = 0
-enemy_health = 100
-enemy_max_health = 100
+enemy_damage = 10
+enemy_damage_cooldown_frames = 30
+enemy_hit_damage = 25
+
+spawn_timer = 0
+SPAWN_INTERVAL = 180
+MAX_ENEMIES = 6
+
+enemies = [
+    {"x": 400, "y": 250, "health": 100, "max_health": 100, "alive": True, "cooldown": 0}
+]
 
 game_map = [
     "111111111111",
@@ -105,23 +110,106 @@ def cast_rays(horizon_y):
                 )
                 break
 
-def draw_enemy(horizon_y):
-    if not enemy_alive:
+def move_enemies():
+    global player_health
+
+    for enemy in enemies:
+        if not enemy["alive"]:
+            continue
+
+        dx = player_x - enemy["x"]
+        dy = player_y - enemy["y"]
+        distance = math.sqrt(dx * dx + dy * dy)
+
+        if distance > 0:
+            move_x = (dx / distance) * enemy_speed
+            move_y = (dy / distance) * enemy_speed
+
+            new_enemy_x = enemy["x"] + move_x
+            new_enemy_y = enemy["y"] + move_y
+
+            if not wall_collision(new_enemy_x, enemy["y"]):
+                enemy["x"] = new_enemy_x
+
+            if not wall_collision(enemy["x"], new_enemy_y):
+                enemy["y"] = new_enemy_y
+
+        if enemy["cooldown"] > 0:
+            enemy["cooldown"] -= 1
+
+        if distance < 25 and enemy["cooldown"] == 0:
+            player_health -= enemy_damage
+            enemy["cooldown"] = enemy_damage_cooldown_frames
+
+def spawn_enemy():
+    alive_count = sum(1 for enemy in enemies if enemy["alive"])
+    if alive_count >= MAX_ENEMIES:
         return
 
-    dx = enemy_x - player_x
-    dy = enemy_y - player_y
+    spawn_points = [
+        {"x": 400, "y": 250},
+        {"x": 300, "y": 300},
+        {"x": 500, "y": 200},
+        {"x": 450, "y": 150},
+        {"x": 200, "y": 250},
+        {"x": 350, "y": 150},
+    ]
 
-    distance = math.sqrt(dx * dx + dy * dy)
-    enemy_angle = math.atan2(dy, dx) - player_angle
+    for point in spawn_points:
+        too_close_to_enemy = False
 
-    while enemy_angle > math.pi:
-        enemy_angle -= 2 * math.pi
-    while enemy_angle < -math.pi:
-        enemy_angle += 2 * math.pi
+        for enemy in enemies:
+            if enemy["alive"]:
+                dx = enemy["x"] - point["x"]
+                dy = enemy["y"] - point["y"]
+                distance = math.sqrt(dx * dx + dy * dy)
 
-    if -HALF_FOV < enemy_angle < HALF_FOV and distance > 20:
-        screen_x = (WIDTH // 2) + (enemy_angle / DELTA_ANGLE) * SCALE
+                if distance < 40:
+                    too_close_to_enemy = True
+                    break
+
+        dx_player = player_x - point["x"]
+        dy_player = player_y - point["y"]
+        distance_player = math.sqrt(dx_player * dx_player + dy_player * dy_player)
+
+        if distance_player < 80:
+            continue
+
+        if not wall_collision(point["x"], point["y"]) and not too_close_to_enemy:
+            enemies.append({
+                "x": point["x"],
+                "y": point["y"],
+                "health": 100,
+                "max_health": 100,
+                "alive": True,
+                "cooldown": 0
+            })
+            break
+
+def draw_enemies(horizon_y):
+    visible_enemies = []
+
+    for enemy in enemies:
+        if not enemy["alive"]:
+            continue
+
+        dx = enemy["x"] - player_x
+        dy = enemy["y"] - player_y
+        distance = math.sqrt(dx * dx + dy * dy)
+        angle = math.atan2(dy, dx) - player_angle
+
+        while angle > math.pi:
+            angle -= 2 * math.pi
+        while angle < -math.pi:
+            angle += 2 * math.pi
+
+        if -HALF_FOV < angle < HALF_FOV and distance > 20:
+            visible_enemies.append((distance, angle, enemy))
+
+    visible_enemies.sort(reverse=True, key=lambda item: item[0])
+
+    for distance, angle, enemy in visible_enemies:
+        screen_x = (WIDTH // 2) + (angle / DELTA_ANGLE) * SCALE
 
         size = min(300, int(SCREEN_DIST / (distance + 0.0001) * 40))
         screen_y = horizon_y - size // 2
@@ -164,38 +252,8 @@ def draw_enemy(horizon_y):
 
         pygame.draw.rect(screen, (60, 0, 0), (bar_x, bar_y, bar_width, bar_height))
 
-        current_bar_width = int((enemy_health / enemy_max_health) * bar_width)
+        current_bar_width = int((enemy["health"] / enemy["max_health"]) * bar_width)
         pygame.draw.rect(screen, (0, 200, 0), (bar_x, bar_y, current_bar_width, bar_height))
-
-def move_enemy():
-    global enemy_x, enemy_y, player_health, enemy_damage_cooldown
-
-    if not enemy_alive:
-        return
-
-    dx = player_x - enemy_x
-    dy = player_y - enemy_y
-    distance = math.sqrt(dx * dx + dy * dy)
-
-    if distance > 0:
-        move_x = (dx / distance) * enemy_speed
-        move_y = (dy / distance) * enemy_speed
-
-        new_enemy_x = enemy_x + move_x
-        new_enemy_y = enemy_y + move_y
-
-        if not wall_collision(new_enemy_x, enemy_y):
-            enemy_x = new_enemy_x
-
-        if not wall_collision(enemy_x, new_enemy_y):
-            enemy_y = new_enemy_y
-
-    if enemy_damage_cooldown > 0:
-        enemy_damage_cooldown -= 1
-
-    if distance < 25 and enemy_damage_cooldown == 0:
-        player_health -= 10
-        enemy_damage_cooldown = 30
 
 def draw_minimap():
     for row_index, row in enumerate(game_map):
@@ -213,13 +271,14 @@ def draw_minimap():
                 )
             )
 
-    if enemy_alive:
-        pygame.draw.circle(
-            screen,
-            (255, 0, 0),
-            (int(enemy_x * MINIMAP_SCALE), int(enemy_y * MINIMAP_SCALE)),
-            4
-        )
+    for enemy in enemies:
+        if enemy["alive"]:
+            pygame.draw.circle(
+                screen,
+                (255, 0, 0),
+                (int(enemy["x"] * MINIMAP_SCALE), int(enemy["y"] * MINIMAP_SCALE)),
+                4
+            )
 
     pygame.draw.circle(
         screen,
@@ -276,32 +335,43 @@ def draw_weapon():
 
 def draw_hud():
     health_text = font.render(f"Vida: {player_health}", True, (255, 255, 255))
+    enemies_alive = sum(1 for enemy in enemies if enemy["alive"])
+    enemy_text = font.render(f"Inimigos: {enemies_alive}", True, (255, 255, 255))
+
     screen.blit(health_text, (10, HEIGHT - 35))
+    screen.blit(enemy_text, (10, HEIGHT - 65))
 
 def shoot_enemy():
-    global enemy_alive, enemy_health
+    visible_targets = []
 
-    if not enemy_alive:
-        return
+    for enemy in enemies:
+        if not enemy["alive"]:
+            continue
 
-    dx = enemy_x - player_x
-    dy = enemy_y - player_y
+        dx = enemy["x"] - player_x
+        dy = enemy["y"] - player_y
 
-    distance = math.sqrt(dx * dx + dy * dy)
-    enemy_angle = math.atan2(dy, dx) - player_angle
+        distance = math.sqrt(dx * dx + dy * dy)
+        enemy_angle = math.atan2(dy, dx) - player_angle
 
-    while enemy_angle > math.pi:
-        enemy_angle -= 2 * math.pi
-    while enemy_angle < -math.pi:
-        enemy_angle += 2 * math.pi
+        while enemy_angle > math.pi:
+            enemy_angle -= 2 * math.pi
+        while enemy_angle < -math.pi:
+            enemy_angle += 2 * math.pi
 
-    aim_tolerance = 0.08
+        aim_tolerance = 0.08
 
-    if abs(enemy_angle) < aim_tolerance and distance < 500:
-        enemy_health -= 25
-        if enemy_health <= 0:
-            enemy_health = 0
-            enemy_alive = False
+        if abs(enemy_angle) < aim_tolerance and distance < 500:
+            visible_targets.append((distance, enemy))
+
+    if visible_targets:
+        visible_targets.sort(key=lambda item: item[0])
+        _, enemy = visible_targets[0]
+
+        enemy["health"] -= enemy_hit_damage
+        if enemy["health"] <= 0:
+            enemy["health"] = 0
+            enemy["alive"] = False
 
 running = True
 while running:
@@ -347,7 +417,12 @@ while running:
         player_x = new_x
         player_y = new_y
 
-    move_enemy()
+    move_enemies()
+
+    spawn_timer += 1
+    if spawn_timer >= SPAWN_INTERVAL:
+        spawn_enemy()
+        spawn_timer = 0
 
     if shooting:
         shoot_timer -= 1
@@ -363,7 +438,7 @@ while running:
     pygame.draw.rect(screen, (60, 60, 60), (0, horizon_y, WIDTH, HEIGHT - horizon_y))
 
     cast_rays(horizon_y)
-    draw_enemy(horizon_y)
+    draw_enemies(horizon_y)
     draw_minimap()
     draw_crosshair()
     draw_weapon()
