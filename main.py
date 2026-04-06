@@ -397,6 +397,36 @@ def shoot_enemy():
             enemy["alive"] = False
             score += 100
 
+def reset_game():
+    global player_x, player_y, player_angle, player_pitch
+    global player_health, score
+    global shooting, shoot_timer
+    global enemy_speed, spawn_timer, SPAWN_INTERVAL
+    global wave, wave_timer
+    global enemies
+
+    player_x = 150
+    player_y = 150
+    player_angle = 0
+    player_pitch = 0
+
+    player_health = 100
+    score = 0
+
+    shooting = False
+    shoot_timer = 0
+
+    enemy_speed = 1.2
+    spawn_timer = 0
+    SPAWN_INTERVAL = 180
+
+    wave = 1
+    wave_timer = 0
+
+    enemies = [
+        {"x": 400, "y": 250, "health": 100, "max_health": 100, "alive": True, "cooldown": 0}
+    ]
+
 running = True
 while running:
     for event in pygame.event.get():
@@ -404,50 +434,57 @@ while running:
             running = False
 
         if event.type == pygame.MOUSEBUTTONDOWN:
-            if event.button == 1 and not shooting:
+            if event.button == 1 and not shooting and player_health > 0:
                 shooting = True
                 shoot_timer = SHOOT_DURATION
                 shoot_enemy()
 
-    mouse_dx, mouse_dy = pygame.mouse.get_rel()
+        if event.type == pygame.KEYDOWN:
+            if event.key == pygame.K_r and player_health <= 0:
+                reset_game()
 
-    player_angle += mouse_dx * mouse_sensitivity
-    player_pitch -= mouse_dy * mouse_sensitivity
+    if player_health > 0:
+        mouse_dx, mouse_dy = pygame.mouse.get_rel()
 
-    player_pitch = max(-0.5, min(0.5, player_pitch))
+        player_angle += mouse_dx * mouse_sensitivity
+        player_pitch -= mouse_dy * mouse_sensitivity
 
-    keys = pygame.key.get_pressed()
+        player_pitch = max(-0.5, min(0.5, player_pitch))
 
-    new_x = player_x
-    new_y = player_y
+        keys = pygame.key.get_pressed()
 
-    if keys[pygame.K_w]:
-        new_x += math.cos(player_angle) * player_speed
-        new_y += math.sin(player_angle) * player_speed
+        new_x = player_x
+        new_y = player_y
 
-    if keys[pygame.K_s]:
-        new_x -= math.cos(player_angle) * player_speed
-        new_y -= math.sin(player_angle) * player_speed
+        if keys[pygame.K_w]:
+            new_x += math.cos(player_angle) * player_speed
+            new_y += math.sin(player_angle) * player_speed
 
-    if keys[pygame.K_a]:
-        new_x += math.cos(player_angle - math.pi / 2) * player_speed
-        new_y += math.sin(player_angle - math.pi / 2) * player_speed
+        if keys[pygame.K_s]:
+            new_x -= math.cos(player_angle) * player_speed
+            new_y -= math.sin(player_angle) * player_speed
 
-    if keys[pygame.K_d]:
-        new_x += math.cos(player_angle + math.pi / 2) * player_speed
-        new_y += math.sin(player_angle + math.pi / 2) * player_speed
+        if keys[pygame.K_a]:
+            new_x += math.cos(player_angle - math.pi / 2) * player_speed
+            new_y += math.sin(player_angle - math.pi / 2) * player_speed
 
-    if not wall_collision(new_x, new_y):
-        player_x = new_x
-        player_y = new_y
+        if keys[pygame.K_d]:
+            new_x += math.cos(player_angle + math.pi / 2) * player_speed
+            new_y += math.sin(player_angle + math.pi / 2) * player_speed
 
-    move_enemies()
-    update_wave()
+        if not wall_collision(new_x, new_y):
+            player_x = new_x
+            player_y = new_y
 
-    spawn_timer += 1
-    if spawn_timer >= SPAWN_INTERVAL:
-        spawn_enemy()
-        spawn_timer = 0
+        move_enemies()
+        update_wave()
+
+        spawn_timer += 1
+        if spawn_timer >= SPAWN_INTERVAL:
+            spawn_enemy()
+            spawn_timer = 0
+    else:
+        pygame.mouse.get_rel()
 
     if shooting:
         shoot_timer -= 1
@@ -471,7 +508,10 @@ while running:
 
     if player_health <= 0:
         game_over_text = font.render("GAME OVER", True, (255, 50, 50))
-        screen.blit(game_over_text, (WIDTH // 2 - 70, HEIGHT // 2 - 20))
+        restart_text = font.render("Pressione R para reiniciar", True, (255, 255, 255))
+
+        screen.blit(game_over_text, (WIDTH // 2 - 70, HEIGHT // 2 - 30))
+        screen.blit(restart_text, (WIDTH // 2 - 130, HEIGHT // 2 + 10))
 
     pygame.display.update()
     clock.tick(60)
