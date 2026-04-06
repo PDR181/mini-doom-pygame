@@ -1,6 +1,7 @@
 import pygame
 import sys
 import math
+import random
 
 pygame.init()
 
@@ -42,9 +43,6 @@ shooting = False
 shoot_timer = 0
 SHOOT_DURATION = 8
 
-enemy_speed = 1.2
-enemy_damage = 10
-enemy_damage_cooldown_frames = 30
 enemy_hit_damage = 25
 
 spawn_timer = 0
@@ -55,10 +53,6 @@ wave = 1
 wave_timer = 0
 WAVE_DURATION = 600
 
-enemies = [
-    {"x": 400, "y": 250, "health": 100, "max_health": 100, "alive": True, "cooldown": 0}
-]
-
 game_map = [
     "111111111111",
     "100000000001",
@@ -67,6 +61,55 @@ game_map = [
     "101000001001",
     "100000000001",
     "111111111111"
+]
+
+def create_enemy(x, y, enemy_type):
+    if enemy_type == "fast":
+        return {
+            "x": x,
+            "y": y,
+            "health": 60,
+            "max_health": 60,
+            "alive": True,
+            "cooldown": 0,
+            "type": "fast",
+            "speed": 2.0,
+            "damage": 8,
+            "color": (255, 180, 60),
+            "size_multiplier": 0.8
+        }
+
+    if enemy_type == "tank":
+        return {
+            "x": x,
+            "y": y,
+            "health": 180,
+            "max_health": 180,
+            "alive": True,
+            "cooldown": 0,
+            "type": "tank",
+            "speed": 0.8,
+            "damage": 15,
+            "color": (120, 60, 200),
+            "size_multiplier": 1.25
+        }
+
+    return {
+        "x": x,
+        "y": y,
+        "health": 100,
+        "max_health": 100,
+        "alive": True,
+        "cooldown": 0,
+        "type": "normal",
+        "speed": 1.2,
+        "damage": 10,
+        "color": (200, 50, 50),
+        "size_multiplier": 1.0
+    }
+
+enemies = [
+    create_enemy(400, 250, "normal")
 ]
 
 def wall_collision(x, y):
@@ -127,8 +170,8 @@ def move_enemies():
         distance = math.sqrt(dx * dx + dy * dy)
 
         if distance > 0:
-            move_x = (dx / distance) * enemy_speed
-            move_y = (dy / distance) * enemy_speed
+            move_x = (dx / distance) * enemy["speed"]
+            move_y = (dy / distance) * enemy["speed"]
 
             new_enemy_x = enemy["x"] + move_x
             new_enemy_y = enemy["y"] + move_y
@@ -143,8 +186,17 @@ def move_enemies():
             enemy["cooldown"] -= 1
 
         if distance < 25 and enemy["cooldown"] == 0:
-            player_health -= enemy_damage
-            enemy["cooldown"] = enemy_damage_cooldown_frames
+            player_health -= enemy["damage"]
+            enemy["cooldown"] = 30
+
+def choose_enemy_type():
+    if wave >= 6:
+        return random.choice(["normal", "fast", "tank"])
+    if wave >= 4:
+        return random.choice(["normal", "fast", "tank", "fast"])
+    if wave >= 2:
+        return random.choice(["normal", "normal", "fast"])
+    return "normal"
 
 def spawn_enemy():
     alive_count = sum(1 for enemy in enemies if enemy["alive"])
@@ -181,27 +233,19 @@ def spawn_enemy():
             continue
 
         if not wall_collision(point["x"], point["y"]) and not too_close_to_enemy:
-            enemies.append({
-                "x": point["x"],
-                "y": point["y"],
-                "health": 100,
-                "max_health": 100,
-                "alive": True,
-                "cooldown": 0
-            })
+            enemy_type = choose_enemy_type()
+            enemies.append(create_enemy(point["x"], point["y"], enemy_type))
             break
 
 def update_wave():
-    global wave, wave_timer, SPAWN_INTERVAL, enemy_speed
+    global wave, wave_timer, SPAWN_INTERVAL
 
     wave_timer += 1
 
     if wave_timer >= WAVE_DURATION:
         wave += 1
         wave_timer = 0
-
         SPAWN_INTERVAL = max(60, SPAWN_INTERVAL - 15)
-        enemy_speed += 0.1
 
 def draw_enemies(horizon_y):
     visible_enemies = []
@@ -228,7 +272,8 @@ def draw_enemies(horizon_y):
     for distance, angle, enemy in visible_enemies:
         screen_x = (WIDTH // 2) + (angle / DELTA_ANGLE) * SCALE
 
-        size = min(300, int(SCREEN_DIST / (distance + 0.0001) * 40))
+        base_size = int(SCREEN_DIST / (distance + 0.0001) * 40)
+        size = min(320, int(base_size * enemy["size_multiplier"]))
         screen_y = horizon_y - size // 2
 
         enemy_rect = pygame.Rect(
@@ -238,16 +283,17 @@ def draw_enemies(horizon_y):
             size
         )
 
-        pygame.draw.rect(screen, (200, 50, 50), enemy_rect)
+        pygame.draw.rect(screen, enemy["color"], enemy_rect)
 
+        eye_size = max(4, size // 6)
         pygame.draw.rect(
             screen,
             (255, 220, 220),
             (
                 int(screen_x - size // 4),
                 int(screen_y + size // 5),
-                size // 6,
-                size // 6
+                eye_size,
+                eye_size
             )
         )
 
@@ -257,8 +303,8 @@ def draw_enemies(horizon_y):
             (
                 int(screen_x + size // 10),
                 int(screen_y + size // 5),
-                size // 6,
-                size // 6
+                eye_size,
+                eye_size
             )
         )
 
@@ -292,7 +338,7 @@ def draw_minimap():
         if enemy["alive"]:
             pygame.draw.circle(
                 screen,
-                (255, 0, 0),
+                enemy["color"],
                 (int(enemy["x"] * MINIMAP_SCALE), int(enemy["y"] * MINIMAP_SCALE)),
                 4
             )
@@ -401,7 +447,7 @@ def reset_game():
     global player_x, player_y, player_angle, player_pitch
     global player_health, score
     global shooting, shoot_timer
-    global enemy_speed, spawn_timer, SPAWN_INTERVAL
+    global spawn_timer, SPAWN_INTERVAL
     global wave, wave_timer
     global enemies
 
@@ -416,7 +462,6 @@ def reset_game():
     shooting = False
     shoot_timer = 0
 
-    enemy_speed = 1.2
     spawn_timer = 0
     SPAWN_INTERVAL = 180
 
@@ -424,7 +469,7 @@ def reset_game():
     wave_timer = 0
 
     enemies = [
-        {"x": 400, "y": 250, "health": 100, "max_health": 100, "alive": True, "cooldown": 0}
+        create_enemy(400, 250, "normal")
     ]
 
 running = True
