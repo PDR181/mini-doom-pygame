@@ -26,6 +26,7 @@ player_speed = 3
 mouse_sensitivity = 0.003
 player_health = 100
 score = 0
+damage_flash = 0
 
 TILE_SIZE = 50
 
@@ -159,7 +160,7 @@ def cast_rays(horizon_y):
                 break
 
 def move_enemies():
-    global player_health
+    global player_health, damage_flash
 
     for enemy in enemies:
         if not enemy["alive"]:
@@ -187,6 +188,7 @@ def move_enemies():
 
         if distance < 25 and enemy["cooldown"] == 0:
             player_health -= enemy["damage"]
+            damage_flash = 10
             enemy["cooldown"] = 30
 
 def choose_enemy_type():
@@ -445,7 +447,7 @@ def shoot_enemy():
 
 def reset_game():
     global player_x, player_y, player_angle, player_pitch
-    global player_health, score
+    global player_health, score, damage_flash
     global shooting, shoot_timer
     global spawn_timer, SPAWN_INTERVAL
     global wave, wave_timer
@@ -458,6 +460,7 @@ def reset_game():
 
     player_health = 100
     score = 0
+    damage_flash = 0
 
     shooting = False
     shoot_timer = 0
@@ -536,6 +539,9 @@ while running:
         if shoot_timer <= 0:
             shooting = False
 
+    if damage_flash > 0:
+        damage_flash -= 1
+
     horizon_offset = int(player_pitch * 200)
     horizon_y = HEIGHT // 2 + horizon_offset
 
@@ -550,6 +556,12 @@ while running:
     draw_crosshair()
     draw_weapon()
     draw_hud()
+
+    if damage_flash > 0:
+        overlay = pygame.Surface((WIDTH, HEIGHT))
+        overlay.set_alpha(40)
+        overlay.fill((255, 0, 0))
+        screen.blit(overlay, (0, 0))
 
     if player_health <= 0:
         game_over_text = font.render("GAME OVER", True, (255, 50, 50))
