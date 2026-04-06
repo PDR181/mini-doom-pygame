@@ -27,6 +27,7 @@ mouse_sensitivity = 0.003
 player_health = 100
 score = 0
 damage_flash = 0
+hit_feedback = 0
 
 TILE_SIZE = 50
 
@@ -367,8 +368,10 @@ def draw_crosshair():
     center_x = WIDTH // 2
     center_y = HEIGHT // 2
 
-    pygame.draw.line(screen, (255, 255, 255), (center_x - 10, center_y), (center_x + 10, center_y), 2)
-    pygame.draw.line(screen, (255, 255, 255), (center_x, center_y - 10), (center_x, center_y + 10), 2)
+    color = (0, 255, 0) if hit_feedback > 0 else (255, 255, 255)
+
+    pygame.draw.line(screen, color, (center_x - 10, center_y), (center_x + 10, center_y), 2)
+    pygame.draw.line(screen, color, (center_x, center_y - 10), (center_x, center_y + 10), 2)
 
 def draw_weapon():
     weapon_width = 140
@@ -411,7 +414,7 @@ def draw_hud():
     screen.blit(wave_text, (10, HEIGHT - 125))
 
 def shoot_enemy():
-    global score
+    global score, hit_feedback
 
     visible_targets = []
 
@@ -440,6 +443,8 @@ def shoot_enemy():
         _, enemy = visible_targets[0]
 
         enemy["health"] -= enemy_hit_damage
+        hit_feedback = 6
+
         if enemy["health"] <= 0:
             enemy["health"] = 0
             enemy["alive"] = False
@@ -447,7 +452,7 @@ def shoot_enemy():
 
 def reset_game():
     global player_x, player_y, player_angle, player_pitch
-    global player_health, score, damage_flash
+    global player_health, score, damage_flash, hit_feedback
     global shooting, shoot_timer
     global spawn_timer, SPAWN_INTERVAL
     global wave, wave_timer
@@ -461,6 +466,7 @@ def reset_game():
     player_health = 100
     score = 0
     damage_flash = 0
+    hit_feedback = 0
 
     shooting = False
     shoot_timer = 0
@@ -542,6 +548,9 @@ while running:
     if damage_flash > 0:
         damage_flash -= 1
 
+    if hit_feedback > 0:
+        hit_feedback -= 1
+
     horizon_offset = int(player_pitch * 200)
     horizon_y = HEIGHT // 2 + horizon_offset
 
@@ -561,6 +570,12 @@ while running:
         overlay = pygame.Surface((WIDTH, HEIGHT))
         overlay.set_alpha(40)
         overlay.fill((255, 0, 0))
+        screen.blit(overlay, (0, 0))
+
+    if hit_feedback > 0:
+        overlay = pygame.Surface((WIDTH, HEIGHT))
+        overlay.set_alpha(20)
+        overlay.fill((255, 255, 255))
         screen.blit(overlay, (0, 0))
 
     if player_health <= 0:
