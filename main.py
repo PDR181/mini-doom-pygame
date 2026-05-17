@@ -78,6 +78,8 @@ ammo = MAX_AMMO
 reloading = False
 reload_timer = 0
 RELOAD_DURATION = 90
+weapon_cooldown = 0
+WEAPON_COOLDOWN_TIME = 15
 
 enemy_hit_damage = 25
 
@@ -417,6 +419,9 @@ def draw_weapon():
     if shooting:
         weapon_y += 10
 
+    if reloading:
+        weapon_y += 35
+
     pygame.draw.rect(screen, (80, 80, 80), (weapon_x, weapon_y, weapon_width, weapon_height))
     pygame.draw.rect(screen, (40, 40, 40), (weapon_x + 20, weapon_y + 20, 100, 50))
 
@@ -501,6 +506,7 @@ def reset_game():
     global wave, wave_timer
     global enemies
     global ammo, reloading, reload_timer
+    global weapon_cooldown
 
     player_x = 150
     player_y = 150
@@ -517,6 +523,7 @@ def reset_game():
     ammo = MAX_AMMO
     reloading = False
     reload_timer = 0
+    weapon_cooldown = 0
 
     spawn_timer = 0
     SPAWN_INTERVAL = 180
@@ -535,7 +542,7 @@ while running:
             running = False
 
         if event.type == pygame.MOUSEBUTTONDOWN:
-            if event.button == 1 and not shooting and player_health > 0 and ammo > 0 and not reloading:
+            if event.button == 1 and not shooting and player_health > 0 and ammo > 0 and not reloading and weapon_cooldown <= 0:
                 shooting = True
                 shoot_timer = SHOOT_DURATION
 
@@ -543,6 +550,7 @@ while running:
                     shoot_sound.play()
 
                 ammo -= 1
+                weapon_cooldown = WEAPON_COOLDOWN_TIME
 
                 shoot_enemy()
 
@@ -613,6 +621,9 @@ while running:
         if reload_timer <= 0:
             ammo = MAX_AMMO
             reloading = False
+    
+    if weapon_cooldown > 0:
+        weapon_cooldown -= 1
     
     horizon_offset = int(player_pitch * 200)
     horizon_y = HEIGHT // 2 + horizon_offset
