@@ -184,6 +184,8 @@ enemies = [
     create_enemy(400, 250, "normal")
 ]
 
+pickups = []
+
 def wall_collision(x, y):
     map_x = int(x / TILE_SIZE)
     map_y = int(y / TILE_SIZE)
@@ -273,8 +275,63 @@ def choose_enemy_type():
 
 def spawn_enemy():
     alive_count = sum(1 for enemy in enemies if enemy["alive"])
+
     if alive_count >= MAX_ENEMIES:
         return
+
+    spawn_points = [
+        {"x": 400, "y": 250},
+        {"x": 300, "y": 300},
+        {"x": 500, "y": 200},
+        {"x": 450, "y": 150},
+        {"x": 200, "y": 250},
+        {"x": 350, "y": 150},
+    ]
+
+    for point in spawn_points:
+        too_close_to_enemy = False
+
+        for enemy in enemies:
+            if enemy["alive"]:
+                dx = enemy["x"] - point["x"]
+                dy = enemy["y"] - point["y"]
+                distance = math.sqrt(dx * dx + dy * dy)
+
+                if distance < 40:
+                    too_close_to_enemy = True
+                    break
+
+        dx_player = player_x - point["x"]
+        dy_player = player_y - point["y"]
+
+        distance_player = math.sqrt(
+            dx_player * dx_player + dy_player * dy_player
+        )
+
+        if distance_player < 80:
+            continue
+
+        if not wall_collision(point["x"], point["y"]) and not too_close_to_enemy:
+            enemy_type = choose_enemy_type()
+            enemies.append(create_enemy(point["x"], point["y"], enemy_type))
+            break
+
+
+def spawn_pickup(x, y):
+    pickup_type = random.choice(["ammo", "medkit"])
+
+    pickups.append({
+        "x": x,
+        "y": y,
+        "type": pickup_type
+    })
+    pickup_type = random.choice(["ammo", "medkit"])
+
+    pickups.append({
+        "x": x,
+        "y": y,
+        "type": pickup_type
+    })
 
     spawn_points = [
         {"x": 400, "y": 250},
@@ -390,6 +447,63 @@ def draw_enemies(horizon_y):
 
         current_bar_width = int((enemy["health"] / enemy["max_health"]) * bar_width)
         pygame.draw.rect(screen, (0, 200, 0), (bar_x, bar_y, current_bar_width, bar_height))
+
+def draw_pickups(horizon_y):
+    for pickup in pickups:
+        dx = pickup["x"] - player_x
+        dy = pickup["y"] - player_y
+
+        distance = math.sqrt(dx * dx + dy * dy)
+
+        angle = math.atan2(dy, dx) - player_angle
+
+        while angle > math.pi:
+            angle -= 2 * math.pi
+
+        while angle < -math.pi:
+            angle += 2 * math.pi
+
+        if -HALF_FOV < angle < HALF_FOV and distance > 20:
+            screen_x = (WIDTH // 2) + (angle / DELTA_ANGLE) * SCALE
+
+            size = int(SCREEN_DIST / (distance + 0.0001) * 20)
+
+            screen_y = horizon_y - size // 2 + 40
+
+            color = (50, 200, 255)
+
+            if pickup["type"] == "medkit":
+                color = (50, 255, 50)
+
+            pygame.draw.circle(
+                screen,
+                color,
+                (int(screen_x), int(screen_y)),
+                max(4, size)
+            )
+
+def update_pickups():
+    global ammo, player_health
+
+    collected = []
+
+    for pickup in pickups:
+        dx = pickup["x"] - player_x
+        dy = pickup["y"] - player_y
+
+        distance = math.sqrt(dx * dx + dy * dy)
+
+        if distance < 30:
+            if pickup["type"] == "ammo":
+                ammo = min(MAX_AMMO, ammo + 6)
+
+            elif pickup["type"] == "medkit":
+                player_health = min(100, player_health + 25)
+
+            collected.append(pickup)
+
+    for pickup in collected:
+        pickups.remove(pickup)
 
 def draw_minimap():
     for row_index, row in enumerate(game_map):
@@ -557,6 +671,9 @@ def shoot_enemy():
             enemy["alive"] = False
             score += 100
 
+        if random.random() < 0.4:
+            spawn_pickup(enemy["x"], enemy["y"])
+
 def reset_game():
     global player_x, player_y, player_angle, player_pitch
     global player_health, score, damage_flash, hit_feedback
@@ -698,6 +815,7 @@ while running:
             player_y = new_y
 
         move_enemies()
+        update_pickups()
         update_wave()
 
         spawn_timer += 1
@@ -738,6 +856,7 @@ while running:
 
     cast_rays(horizon_y)
     draw_enemies(horizon_y)
+    draw_pickups(horizon_y)
     draw_minimap()
     draw_crosshair()
     draw_weapon()
