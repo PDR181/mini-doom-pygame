@@ -5,6 +5,12 @@ import random
 
 pygame.init()
 
+try:
+    pygame.mixer.init()
+    audio_enabled = True
+except:
+    audio_enabled = False
+
 WIDTH = 800
 HEIGHT = 600
 
@@ -28,6 +34,25 @@ player_health = 100
 score = 0
 damage_flash = 0
 hit_feedback = 0
+
+if audio_enabled:
+    try:
+        shoot_sound = pygame.mixer.Sound("assets/sounds/shoot.wav")
+        print("shoot.wav carregado com sucesso")
+    except Exception as e:
+        print("Erro ao carregar shoot.wav:", e)
+        shoot_sound = None
+
+    try:
+        hit_sound = pygame.mixer.Sound("assets/sounds/hit.wav")
+        print("hit.wav carregado com sucesso")
+    except Exception as e:
+        print("Erro ao carregar hit.wav:", e)
+        hit_sound = None
+else:
+    print("Audio desabilitado: mixer nao iniciou")
+    shoot_sound = None
+    hit_sound = None
 
 TILE_SIZE = 50
 
@@ -445,6 +470,9 @@ def shoot_enemy():
         enemy["health"] -= enemy_hit_damage
         hit_feedback = 6
 
+        if hit_sound:
+            hit_sound.play()
+
         if enemy["health"] <= 0:
             enemy["health"] = 0
             enemy["alive"] = False
@@ -491,6 +519,10 @@ while running:
             if event.button == 1 and not shooting and player_health > 0:
                 shooting = True
                 shoot_timer = SHOOT_DURATION
+
+                if shoot_sound:
+                    shoot_sound.play()
+
                 shoot_enemy()
 
         if event.type == pygame.KEYDOWN:
