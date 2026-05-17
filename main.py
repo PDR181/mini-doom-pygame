@@ -70,9 +70,10 @@ MINIMAP_SCALE = 0.2
 
 shooting = False
 shoot_timer = 0
+mouse_held = False
 SHOOT_DURATION = 8
 
-MAX_AMMO = 12
+MAX_AMMO = 30
 ammo = MAX_AMMO
 
 reloading = False
@@ -80,6 +81,39 @@ reload_timer = 0
 RELOAD_DURATION = 90
 weapon_cooldown = 0
 WEAPON_COOLDOWN_TIME = 15
+
+current_weapon = "rifle"
+
+weapons = {
+    "pistol": {
+        "damage": 25,
+        "cooldown": 15,
+        "ammo": 12,
+        "color": (80, 80, 80),
+        "automatic": False
+    },
+
+    "rifle": {
+        "damage": 10,
+        "cooldown": 4,
+        "ammo": 30,
+        "color": (60, 60, 60),
+        "automatic": True
+    },
+
+    "shotgun": {
+        "damage": 18,
+        "cooldown": 40,
+        "ammo": 6,
+        "color": (120, 70, 40),
+        "automatic": False,
+        "pellets": 6,
+        "spread": 0.12
+    }
+}
+
+MAX_AMMO = weapons[current_weapon]["ammo"]
+ammo = MAX_AMMO
 
 enemy_hit_damage = 25
 
@@ -422,11 +456,17 @@ def draw_weapon():
     if reloading:
         weapon_y += 35
 
-    pygame.draw.rect(screen, (80, 80, 80), (weapon_x, weapon_y, weapon_width, weapon_height))
+    weapon_color = weapons[current_weapon]["color"]
+
+    pygame.draw.rect(
+        screen,
+        weapon_color,
+        (weapon_x, weapon_y, weapon_width, weapon_height)
+)
     pygame.draw.rect(screen, (40, 40, 40), (weapon_x + 20, weapon_y + 20, 100, 50))
 
-    barrel_width = 30
-    barrel_height = 60
+    barrel_width = 50 if current_weapon == "shotgun" else 30
+    barrel_height = 40 if current_weapon == "shotgun" else 60
     barrel_x = WIDTH // 2 - barrel_width // 2
     barrel_y = weapon_y - 20
 
@@ -447,12 +487,14 @@ def draw_hud():
     score_text = font.render(f"Pontos: {score}", True, (255, 255, 255))
     wave_text = font.render(f"Wave: {wave}", True, (255, 255, 255))
     ammo_text = font.render(f"Municao: {ammo}/{MAX_AMMO}", True, (255, 255, 255))
+    weapon_text = font.render(f"Arma: {current_weapon.upper()}", True, (255, 255, 255))
 
     screen.blit(health_text, (10, HEIGHT - 35))
     screen.blit(enemy_text, (10, HEIGHT - 65))
     screen.blit(score_text, (10, HEIGHT - 95))
     screen.blit(wave_text, (10, HEIGHT - 125))
     screen.blit(ammo_text, (10, HEIGHT - 155))
+    screen.blit(weapon_text, (10, HEIGHT - 185))
 
     if reloading:
         reload_text = font.render("RECARREGANDO...", True, (255, 220, 50))
@@ -487,7 +529,24 @@ def shoot_enemy():
         visible_targets.sort(key=lambda item: item[0])
         _, enemy = visible_targets[0]
 
-        enemy["health"] -= enemy_hit_damage
+        if current_weapon == "shotgun":
+            pellets = weapons[current_weapon]["pellets"]
+
+            total_damage = 0
+
+            for _ in range(pellets):
+                spread = random.uniform(
+                    -weapons[current_weapon]["spread"],
+                    weapons[current_weapon]["spread"]
+                )
+
+                if abs(enemy_angle + spread) < aim_tolerance:
+                    total_damage += weapons[current_weapon]["damage"]
+
+            enemy["health"] -= total_damage
+
+        else:
+            enemy["health"] -= weapons[current_weapon]["damage"]
         hit_feedback = 6
 
         if hit_sound:
@@ -507,6 +566,7 @@ def reset_game():
     global enemies
     global ammo, reloading, reload_timer
     global weapon_cooldown
+    global mouse_held
 
     player_x = 150
     player_y = 150
@@ -520,6 +580,7 @@ def reset_game():
 
     shooting = False
     shoot_timer = 0
+    mouse_held = False
     ammo = MAX_AMMO
     reloading = False
     reload_timer = 0
@@ -542,17 +603,25 @@ while running:
             running = False
 
         if event.type == pygame.MOUSEBUTTONDOWN:
-            if event.button == 1 and not shooting and player_health > 0 and ammo > 0 and not reloading and weapon_cooldown <= 0:
-                shooting = True
-                shoot_timer = SHOOT_DURATION
+            if event.button == 1:
+                mouse_held = True
 
-                if shoot_sound:
-                    shoot_sound.play()
+                if not weapons[current_weapon]["automatic"]:
+                    if not shooting and player_health > 0 and ammo > 0 and not reloading and weapon_cooldown <= 0:
+                        shooting = True
+                        shoot_timer = SHOOT_DURATION
 
-                ammo -= 1
-                weapon_cooldown = WEAPON_COOLDOWN_TIME
+                        if shoot_sound:
+                            shoot_sound.play()
 
-                shoot_enemy()
+                        ammo -= 1
+                        weapon_cooldown = weapons[current_weapon]["cooldown"]
+
+                        shoot_enemy()
+
+        if event.type == pygame.MOUSEBUTTONUP:
+            if event.button == 1:
+                mouse_held = False
 
         if event.type == pygame.KEYDOWN:
             if event.key == pygame.K_r and player_health <= 0:
@@ -560,6 +629,27 @@ while running:
             if event.key == pygame.K_r and ammo < MAX_AMMO and not reloading and player_health > 0:
                 reloading = True
                 reload_timer = RELOAD_DURATION
+            
+            if event.key == pygame.K_1:
+                current_weapon = "pistol"
+                MAX_AMMO = weapons[current_weapon]["ammo"]
+
+                if ammo > MAX_AMMO:
+                    ammo = MAX_AMMO
+
+            if event.key == pygame.K_2:
+                current_weapon = "rifle"
+                MAX_AMMO = weapons[current_weapon]["ammo"]
+
+                if ammo > MAX_AMMO:
+                    ammo = MAX_AMMO
+
+            if event.key == pygame.K_3:
+                current_weapon = "shotgun"
+                MAX_AMMO = weapons[current_weapon]["ammo"]
+
+                if ammo > MAX_AMMO:
+                    ammo = MAX_AMMO
 
     if player_health > 0:
         mouse_dx, mouse_dy = pygame.mouse.get_rel()
@@ -573,6 +663,19 @@ while running:
 
         new_x = player_x
         new_y = player_y
+
+        if weapons[current_weapon]["automatic"]:
+            if mouse_held and ammo > 0 and not reloading and weapon_cooldown <= 0:
+                shooting = True
+                shoot_timer = SHOOT_DURATION
+
+                if shoot_sound:
+                    shoot_sound.play()
+
+                ammo -= 1
+                weapon_cooldown = weapons[current_weapon]["cooldown"]
+
+                shoot_enemy()
 
         if keys[pygame.K_w]:
             new_x += math.cos(player_angle) * player_speed
