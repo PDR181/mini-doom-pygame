@@ -38,6 +38,7 @@ hit_feedback = 0
 if audio_enabled:
     try:
         shoot_sound = pygame.mixer.Sound("assets/sounds/shoot.wav")
+        shoot_sound.set_volume(0.5)
         print("shoot.wav carregado com sucesso")
     except Exception as e:
         print("Erro ao carregar shoot.wav:", e)
@@ -45,6 +46,7 @@ if audio_enabled:
 
     try:
         hit_sound = pygame.mixer.Sound("assets/sounds/hit.wav")
+        hit_sound.set_volume(0.2)
         print("hit.wav carregado com sucesso")
     except Exception as e:
         print("Erro ao carregar hit.wav:", e)
@@ -69,6 +71,13 @@ MINIMAP_SCALE = 0.2
 shooting = False
 shoot_timer = 0
 SHOOT_DURATION = 8
+
+MAX_AMMO = 12
+ammo = MAX_AMMO
+
+reloading = False
+reload_timer = 0
+RELOAD_DURATION = 90
 
 enemy_hit_damage = 25
 
@@ -432,11 +441,17 @@ def draw_hud():
     enemy_text = font.render(f"Inimigos: {enemies_alive}", True, (255, 255, 255))
     score_text = font.render(f"Pontos: {score}", True, (255, 255, 255))
     wave_text = font.render(f"Wave: {wave}", True, (255, 255, 255))
+    ammo_text = font.render(f"Municao: {ammo}/{MAX_AMMO}", True, (255, 255, 255))
 
     screen.blit(health_text, (10, HEIGHT - 35))
     screen.blit(enemy_text, (10, HEIGHT - 65))
     screen.blit(score_text, (10, HEIGHT - 95))
     screen.blit(wave_text, (10, HEIGHT - 125))
+    screen.blit(ammo_text, (10, HEIGHT - 155))
+
+    if reloading:
+        reload_text = font.render("RECARREGANDO...", True, (255, 220, 50))
+        screen.blit(reload_text, (WIDTH // 2 - 110, HEIGHT - 60))
 
 def shoot_enemy():
     global score, hit_feedback
@@ -485,6 +500,7 @@ def reset_game():
     global spawn_timer, SPAWN_INTERVAL
     global wave, wave_timer
     global enemies
+    global ammo, reloading, reload_timer
 
     player_x = 150
     player_y = 150
@@ -498,6 +514,9 @@ def reset_game():
 
     shooting = False
     shoot_timer = 0
+    ammo = MAX_AMMO
+    reloading = False
+    reload_timer = 0
 
     spawn_timer = 0
     SPAWN_INTERVAL = 180
@@ -516,18 +535,23 @@ while running:
             running = False
 
         if event.type == pygame.MOUSEBUTTONDOWN:
-            if event.button == 1 and not shooting and player_health > 0:
+            if event.button == 1 and not shooting and player_health > 0 and ammo > 0 and not reloading:
                 shooting = True
                 shoot_timer = SHOOT_DURATION
 
                 if shoot_sound:
                     shoot_sound.play()
 
+                ammo -= 1
+
                 shoot_enemy()
 
         if event.type == pygame.KEYDOWN:
             if event.key == pygame.K_r and player_health <= 0:
                 reset_game()
+            if event.key == pygame.K_r and ammo < MAX_AMMO and not reloading and player_health > 0:
+                reloading = True
+                reload_timer = RELOAD_DURATION
 
     if player_health > 0:
         mouse_dx, mouse_dy = pygame.mouse.get_rel()
@@ -582,7 +606,14 @@ while running:
 
     if hit_feedback > 0:
         hit_feedback -= 1
+    
+    if reloading:
+        reload_timer -= 1
 
+        if reload_timer <= 0:
+            ammo = MAX_AMMO
+            reloading = False
+    
     horizon_offset = int(player_pitch * 200)
     horizon_y = HEIGHT // 2 + horizon_offset
 
