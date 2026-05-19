@@ -23,8 +23,8 @@ pygame.event.set_grab(True)
 clock = pygame.time.Clock()
 font = pygame.font.SysFont("arial", 24)
 
-player_x = 150
-player_y = 150
+player_x = 96
+player_y = 96
 player_angle = 0
 player_pitch = 0
 
@@ -32,6 +32,8 @@ player_speed = 3
 mouse_sensitivity = 0.003
 player_health = 100
 score = 0
+game_won = False
+game_started = False
 damage_flash = 0
 hit_feedback = 0
 
@@ -55,13 +57,20 @@ else:
     print("Audio desabilitado: mixer nao iniciou")
     shoot_sound = None
     hit_sound = None
+    
 
-TILE_SIZE = 50
+TILE_SIZE = 64
 
-FOV = math.pi / 3
+wall_texture = pygame.image.load("assets/textures/wall.png").convert()
+wall_texture = pygame.transform.scale(wall_texture, (64, 64))
+enemy_sprite = pygame.image.load(
+    "assets/sprites/enemy_normal.png"
+).convert_alpha()
+
+FOV = math.pi / 3.5
 HALF_FOV = FOV / 2
-NUM_RAYS = 120
-MAX_DEPTH = 800
+NUM_RAYS = 90
+MAX_DEPTH = 500
 DELTA_ANGLE = FOV / NUM_RAYS
 SCREEN_DIST = (WIDTH / 2) / math.tan(HALF_FOV)
 SCALE = WIDTH // NUM_RAYS
@@ -82,7 +91,7 @@ RELOAD_DURATION = 90
 weapon_cooldown = 0
 WEAPON_COOLDOWN_TIME = 15
 
-current_weapon = "rifle"
+current_weapon = "pistol"
 
 weapons = {
     "pistol": {
@@ -115,24 +124,39 @@ weapons = {
 MAX_AMMO = weapons[current_weapon]["ammo"]
 ammo = MAX_AMMO
 
+owned_weapons = ["pistol"]
+
 enemy_hit_damage = 25
 
-spawn_timer = 0
-SPAWN_INTERVAL = 180
-MAX_ENEMIES = 6
+# """ spawn_timer = 0
+# SPAWN_INTERVAL = 180
+# MAX_ENEMIES = 6
 
-wave = 1
-wave_timer = 0
-WAVE_DURATION = 600
+# wave = 1
+# wave_timer = 0
+# WAVE_DURATION = 600
 
 game_map = [
-    "111111111111",
-    "100000000001",
-    "100011000001",
-    "100000000001",
-    "101000001001",
-    "100000000001",
-    "111111111111"
+    "11111111111111111111",
+    "10000000100000000001",
+    "10111100100111110001",
+    "10000100000010000001",
+    "10100111110010111001",
+    "10000000010010000001",
+    "10111111010011111001",
+    "10000001000000001001",
+    "10111101111111101001",
+    "10000000000000100001",
+    "10111111111110101101",
+    "10000000000000100001",
+    "10111111101111111001",
+    "10000000100000000001",
+    "10111100111111111001",
+    "10000100000000000001",
+    "10110111111111111001",
+    "10000000000000000001",
+    "10001111111111111001",
+    "11111111111111111111"
 ]
 
 def create_enemy(x, y, enemy_type):
@@ -186,6 +210,26 @@ enemies = [
 
 pickups = []
 
+weapon_pickups = [
+    {
+        "x": 768,
+        "y": 384,
+        "weapon": "rifle"
+    },
+
+    {
+        "x": 960,
+        "y": 768,
+        "weapon": "shotgun"
+    }
+]
+
+core_zone = {
+    "x": 1088,
+    "y": 960,
+    "radius": 80
+}
+
 def wall_collision(x, y):
     map_x = int(x / TILE_SIZE)
     map_y = int(y / TILE_SIZE)
@@ -220,17 +264,37 @@ def cast_rays(horizon_y):
                 color_value = max(20, 255 - corrected_depth // 2)
                 color = (color_value, color_value, color_value)
 
-                pygame.draw.rect(
-                    screen,
-                    color,
+                if abs(math.cos(ray_angle)) > abs(math.sin(ray_angle)):
+                    texture_x = int(target_y % TILE_SIZE)
+                else:
+                    texture_x = int(target_x % TILE_SIZE)
+
+                texture_column = wall_texture.subsurface(
+                    texture_x,
+                    0,
+                    1,
+                    TILE_SIZE
+                )
+
+                texture_column = pygame.transform.scale(
+                    texture_column,
+                    (max(1, SCALE), int(wall_height))
+                )
+
+                #shade = max(40, 255 - int(corrected_depth * 0.35))
+
+                #texture_column.fill(
+                #    (shade, shade, shade),
+                #    special_flags=pygame.BLEND_MULT
+                #)
+
+                screen.blit(
+                    texture_column,
                     (
                         ray * SCALE,
-                        horizon_y - wall_height // 2,
-                        SCALE,
-                        wall_height
+                        horizon_y - wall_height // 2
                     )
                 )
-                break
 
 def move_enemies():
     global player_health, damage_flash
@@ -264,57 +328,57 @@ def move_enemies():
             damage_flash = 10
             enemy["cooldown"] = 30
 
-def choose_enemy_type():
-    if wave >= 6:
-        return random.choice(["normal", "fast", "tank"])
-    if wave >= 4:
-        return random.choice(["normal", "fast", "tank", "fast"])
-    if wave >= 2:
-        return random.choice(["normal", "normal", "fast"])
-    return "normal"
+# def choose_enemy_type():
+#     if wave >= 6:
+#         return random.choice(["normal", "fast", "tank"])
+#     if wave >= 4:
+#         return random.choice(["normal", "fast", "tank", "fast"])
+#     if wave >= 2:
+#         return random.choice(["normal", "normal", "fast"])
+#     return "normal"
 
-def spawn_enemy():
-    alive_count = sum(1 for enemy in enemies if enemy["alive"])
+# def spawn_enemy():
+#     alive_count = sum(1 for enemy in enemies if enemy["alive"])
 
-    if alive_count >= MAX_ENEMIES:
-        return
+#     if alive_count >= MAX_ENEMIES:
+#         return
 
-    spawn_points = [
-        {"x": 400, "y": 250},
-        {"x": 300, "y": 300},
-        {"x": 500, "y": 200},
-        {"x": 450, "y": 150},
-        {"x": 200, "y": 250},
-        {"x": 350, "y": 150},
-    ]
+#     spawn_points = [
+#         {"x": 400, "y": 250},
+#         {"x": 300, "y": 300},
+#         {"x": 500, "y": 200},
+#         {"x": 450, "y": 150},
+#         {"x": 200, "y": 250},
+#         {"x": 350, "y": 150},
+#     ]
 
-    for point in spawn_points:
-        too_close_to_enemy = False
+#     for point in spawn_points:
+#         too_close_to_enemy = False
 
-        for enemy in enemies:
-            if enemy["alive"]:
-                dx = enemy["x"] - point["x"]
-                dy = enemy["y"] - point["y"]
-                distance = math.sqrt(dx * dx + dy * dy)
+#         for enemy in enemies:
+#             if enemy["alive"]:
+#                 dx = enemy["x"] - point["x"]
+#                 dy = enemy["y"] - point["y"]
+#                 distance = math.sqrt(dx * dx + dy * dy)
 
-                if distance < 40:
-                    too_close_to_enemy = True
-                    break
+#                 if distance < 40:
+#                     too_close_to_enemy = True
+#                     break
 
-        dx_player = player_x - point["x"]
-        dy_player = player_y - point["y"]
+#         dx_player = player_x - point["x"]
+#         dy_player = player_y - point["y"]
 
-        distance_player = math.sqrt(
-            dx_player * dx_player + dy_player * dy_player
-        )
+#         distance_player = math.sqrt(
+#             dx_player * dx_player + dy_player * dy_player
+#         )
 
-        if distance_player < 80:
-            continue
+#         if distance_player < 80:
+#             continue
 
-        if not wall_collision(point["x"], point["y"]) and not too_close_to_enemy:
-            enemy_type = choose_enemy_type()
-            enemies.append(create_enemy(point["x"], point["y"], enemy_type))
-            break
+#         if not wall_collision(point["x"], point["y"]) and not too_close_to_enemy:
+#             enemy_type = choose_enemy_type()
+#             enemies.append(create_enemy(point["x"], point["y"], enemy_type))
+#             break
 
 
 def spawn_pickup(x, y):
@@ -325,57 +389,50 @@ def spawn_pickup(x, y):
         "y": y,
         "type": pickup_type
     })
-    pickup_type = random.choice(["ammo", "medkit"])
 
-    pickups.append({
-        "x": x,
-        "y": y,
-        "type": pickup_type
-    })
+    # spawn_points = [
+    #     {"x": 400, "y": 250},
+    #     {"x": 300, "y": 300},
+    #     {"x": 500, "y": 200},
+    #     {"x": 450, "y": 150},
+    #     {"x": 200, "y": 250},
+    #     {"x": 350, "y": 150},
+    # ]
 
-    spawn_points = [
-        {"x": 400, "y": 250},
-        {"x": 300, "y": 300},
-        {"x": 500, "y": 200},
-        {"x": 450, "y": 150},
-        {"x": 200, "y": 250},
-        {"x": 350, "y": 150},
-    ]
+    # for point in spawn_points:
+    #     too_close_to_enemy = False
 
-    for point in spawn_points:
-        too_close_to_enemy = False
+    #     for enemy in enemies:
+    #         if enemy["alive"]:
+    #             dx = enemy["x"] - point["x"]
+    #             dy = enemy["y"] - point["y"]
+    #             distance = math.sqrt(dx * dx + dy * dy)
 
-        for enemy in enemies:
-            if enemy["alive"]:
-                dx = enemy["x"] - point["x"]
-                dy = enemy["y"] - point["y"]
-                distance = math.sqrt(dx * dx + dy * dy)
+    #             if distance < 40:
+    #                 too_close_to_enemy = True
+    #                 break
 
-                if distance < 40:
-                    too_close_to_enemy = True
-                    break
+    #     dx_player = player_x - point["x"]
+    #     dy_player = player_y - point["y"]
+    #     distance_player = math.sqrt(dx_player * dx_player + dy_player * dy_player)
 
-        dx_player = player_x - point["x"]
-        dy_player = player_y - point["y"]
-        distance_player = math.sqrt(dx_player * dx_player + dy_player * dy_player)
+    #     if distance_player < 80:
+    #         continue
 
-        if distance_player < 80:
-            continue
+    #     if not wall_collision(point["x"], point["y"]) and not too_close_to_enemy:
+    #         enemy_type = choose_enemy_type()
+    #         enemies.append(create_enemy(point["x"], point["y"], enemy_type))
+    #         break
 
-        if not wall_collision(point["x"], point["y"]) and not too_close_to_enemy:
-            enemy_type = choose_enemy_type()
-            enemies.append(create_enemy(point["x"], point["y"], enemy_type))
-            break
+# def update_wave():
+#     global wave, wave_timer, SPAWN_INTERVAL
 
-def update_wave():
-    global wave, wave_timer, SPAWN_INTERVAL
+#     wave_timer += 1
 
-    wave_timer += 1
-
-    if wave_timer >= WAVE_DURATION:
-        wave += 1
-        wave_timer = 0
-        SPAWN_INTERVAL = max(60, SPAWN_INTERVAL - 15)
+#     if wave_timer >= WAVE_DURATION:
+#         wave += 1
+#         wave_timer = 0
+#         SPAWN_INTERVAL = max(60, SPAWN_INTERVAL - 15)
 
 def draw_enemies(horizon_y):
     visible_enemies = []
@@ -406,35 +463,16 @@ def draw_enemies(horizon_y):
         size = min(320, int(base_size * enemy["size_multiplier"]))
         screen_y = horizon_y - size // 2
 
-        enemy_rect = pygame.Rect(
-            int(screen_x - size // 2),
-            int(screen_y),
-            size,
-            size
+        enemy_sprite_scaled = pygame.transform.scale(
+            enemy_sprite,
+            (size, size)
         )
 
-        pygame.draw.rect(screen, enemy["color"], enemy_rect)
-
-        eye_size = max(4, size // 6)
-        pygame.draw.rect(
-            screen,
-            (255, 220, 220),
+        screen.blit(
+            enemy_sprite_scaled,
             (
-                int(screen_x - size // 4),
-                int(screen_y + size // 5),
-                eye_size,
-                eye_size
-            )
-        )
-
-        pygame.draw.rect(
-            screen,
-            (255, 220, 220),
-            (
-                int(screen_x + size // 10),
-                int(screen_y + size // 5),
-                eye_size,
-                eye_size
+                int(screen_x - size // 2),
+                int(screen_y)
             )
         )
 
@@ -505,6 +543,79 @@ def update_pickups():
     for pickup in collected:
         pickups.remove(pickup)
 
+def draw_weapon_pickups(horizon_y):
+    for pickup in weapon_pickups:
+        dx = pickup["x"] - player_x
+        dy = pickup["y"] - player_y
+
+        distance = math.sqrt(dx * dx + dy * dy)
+
+        angle = math.atan2(dy, dx) - player_angle
+
+        while angle > math.pi:
+            angle -= 2 * math.pi
+
+        while angle < -math.pi:
+            angle += 2 * math.pi
+
+        if -HALF_FOV < angle < HALF_FOV and distance > 20:
+            screen_x = (WIDTH // 2) + (angle / DELTA_ANGLE) * SCALE
+
+            size = int(SCREEN_DIST / (distance + 0.0001) * 18)
+
+            screen_y = horizon_y - size // 2 + 40
+
+            color = (255, 220, 50)
+
+            if pickup["weapon"] == "shotgun":
+                color = (255, 120, 50)
+
+            pygame.draw.rect(
+                screen,
+                color,
+                (
+                    int(screen_x - size // 2),
+                    int(screen_y),
+                    size,
+                    size // 2
+                )
+            )
+
+def update_weapon_pickups():
+    global current_weapon
+
+    collected = []
+
+    for pickup in weapon_pickups:
+        dx = pickup["x"] - player_x
+        dy = pickup["y"] - player_y
+
+        distance = math.sqrt(dx * dx + dy * dy)
+
+        if distance < 40:
+            weapon_name = pickup["weapon"]
+
+            if weapon_name not in owned_weapons:
+                owned_weapons.append(weapon_name)
+
+            current_weapon = weapon_name
+
+            collected.append(pickup)
+
+    for pickup in collected:
+        weapon_pickups.remove(pickup)
+
+def update_core_zone():
+    global game_won
+
+    dx = player_x - core_zone["x"]
+    dy = player_y - core_zone["y"]
+
+    distance = math.sqrt(dx * dx + dy * dy)
+
+    if distance < core_zone["radius"]:
+        game_won = True
+
 def draw_minimap():
     for row_index, row in enumerate(game_map):
         for col_index, tile in enumerate(row):
@@ -529,6 +640,16 @@ def draw_minimap():
                 (int(enemy["x"] * MINIMAP_SCALE), int(enemy["y"] * MINIMAP_SCALE)),
                 4
             )
+    
+    pygame.draw.circle(
+    screen,
+    (255, 0, 255),
+    (
+        int(core_zone["x"] * MINIMAP_SCALE),
+        int(core_zone["y"] * MINIMAP_SCALE)
+    ),
+    6
+)
 
     pygame.draw.circle(
         screen,
@@ -599,16 +720,16 @@ def draw_hud():
     enemies_alive = sum(1 for enemy in enemies if enemy["alive"])
     enemy_text = font.render(f"Inimigos: {enemies_alive}", True, (255, 255, 255))
     score_text = font.render(f"Pontos: {score}", True, (255, 255, 255))
-    wave_text = font.render(f"Wave: {wave}", True, (255, 255, 255))
+    #wave_text = font.render(f"Wave: {wave}", True, (255, 255, 255))
     ammo_text = font.render(f"Municao: {ammo}/{MAX_AMMO}", True, (255, 255, 255))
     weapon_text = font.render(f"Arma: {current_weapon.upper()}", True, (255, 255, 255))
 
     screen.blit(health_text, (10, HEIGHT - 35))
     screen.blit(enemy_text, (10, HEIGHT - 65))
     screen.blit(score_text, (10, HEIGHT - 95))
-    screen.blit(wave_text, (10, HEIGHT - 125))
-    screen.blit(ammo_text, (10, HEIGHT - 155))
-    screen.blit(weapon_text, (10, HEIGHT - 185))
+    #screen.blit(wave_text, (10, HEIGHT - 125))
+    screen.blit(ammo_text, (10, HEIGHT - 125))
+    screen.blit(weapon_text, (10, HEIGHT - 155))
 
     if reloading:
         reload_text = font.render("RECARREGANDO...", True, (255, 220, 50))
@@ -676,22 +797,23 @@ def shoot_enemy():
 
 def reset_game():
     global player_x, player_y, player_angle, player_pitch
-    global player_health, score, damage_flash, hit_feedback
+    global player_health, score, game_won, game_started
+    global damage_flash, hit_feedback
     global shooting, shoot_timer
-    global spawn_timer, SPAWN_INTERVAL
-    global wave, wave_timer
     global enemies
     global ammo, reloading, reload_timer
     global weapon_cooldown
     global mouse_held
 
-    player_x = 150
-    player_y = 150
+    player_x = 96
+    player_y = 96
     player_angle = 0
     player_pitch = 0
 
     player_health = 100
     score = 0
+    game_won = False
+    game_started = False
     damage_flash = 0
     hit_feedback = 0
 
@@ -703,15 +825,31 @@ def reset_game():
     reload_timer = 0
     weapon_cooldown = 0
 
-    spawn_timer = 0
-    SPAWN_INTERVAL = 180
-
-    wave = 1
-    wave_timer = 0
-
+    
     enemies = [
-        create_enemy(400, 250, "normal")
-    ]
+
+    # Entrada
+    create_enemy(320, 128, "normal"),
+
+    # Corredores
+    create_enemy(512, 192, "normal"),
+    create_enemy(640, 256, "fast"),
+
+    # Storage
+    create_enemy(768, 384, "normal"),
+    create_enemy(832, 448, "fast"),
+
+    # Laboratório
+    create_enemy(512, 640, "tank"),
+    create_enemy(704, 640, "normal"),
+
+    # Containment
+    create_enemy(960, 768, "fast"),
+    create_enemy(1024, 832, "tank"),
+
+    # Core Chamber
+    create_enemy(1088, 960, "tank"),
+]
 
 running = True
 while running:
@@ -741,34 +879,38 @@ while running:
                 mouse_held = False
 
         if event.type == pygame.KEYDOWN:
+            if not game_started:
+                if event.key == pygame.K_RETURN:
+                    game_started = True
+
             if event.key == pygame.K_r and player_health <= 0:
                 reset_game()
             if event.key == pygame.K_r and ammo < MAX_AMMO and not reloading and player_health > 0:
                 reloading = True
                 reload_timer = RELOAD_DURATION
             
-            if event.key == pygame.K_1:
+            if event.key == pygame.K_1 and "pistol" in owned_weapons:
                 current_weapon = "pistol"
                 MAX_AMMO = weapons[current_weapon]["ammo"]
 
                 if ammo > MAX_AMMO:
                     ammo = MAX_AMMO
 
-            if event.key == pygame.K_2:
+            if event.key == pygame.K_2 and "rifle" in owned_weapons:
                 current_weapon = "rifle"
                 MAX_AMMO = weapons[current_weapon]["ammo"]
 
                 if ammo > MAX_AMMO:
                     ammo = MAX_AMMO
 
-            if event.key == pygame.K_3:
+            if event.key == pygame.K_3 and "shotgun" in owned_weapons:
                 current_weapon = "shotgun"
                 MAX_AMMO = weapons[current_weapon]["ammo"]
 
                 if ammo > MAX_AMMO:
                     ammo = MAX_AMMO
 
-    if player_health > 0:
+    if player_health > 0 and game_started and not game_won:
         mouse_dx, mouse_dy = pygame.mouse.get_rel()
 
         player_angle += mouse_dx * mouse_sensitivity
@@ -816,12 +958,14 @@ while running:
 
         move_enemies()
         update_pickups()
-        update_wave()
+        update_weapon_pickups()
+        update_core_zone()
+        #update_wave()
 
-        spawn_timer += 1
-        if spawn_timer >= SPAWN_INTERVAL:
-            spawn_enemy()
-            spawn_timer = 0
+        # spawn_timer += 1
+        # if spawn_timer >= SPAWN_INTERVAL:
+        #     spawn_enemy()
+        #     spawn_timer = 0
     else:
         pygame.mouse.get_rel()
 
@@ -857,6 +1001,7 @@ while running:
     cast_rays(horizon_y)
     draw_enemies(horizon_y)
     draw_pickups(horizon_y)
+    draw_weapon_pickups(horizon_y)
     draw_minimap()
     draw_crosshair()
     draw_weapon()
@@ -880,6 +1025,31 @@ while running:
 
         screen.blit(game_over_text, (WIDTH // 2 - 70, HEIGHT // 2 - 30))
         screen.blit(restart_text, (WIDTH // 2 - 130, HEIGHT // 2 + 10))
+
+    if not game_started:
+        overlay = pygame.Surface((WIDTH, HEIGHT))
+        overlay.fill((0, 0, 0))
+        screen.blit(overlay, (0, 0))
+
+        title_font = pygame.font.SysFont("arial", 52, bold=True)
+
+        title = title_font.render("HELLCORE", True, (255, 50, 50))
+        subtitle = font.render("Containment Breach", True, (200, 200, 200))
+
+        start_text = font.render("Pressione ENTER para iniciar", True, (255, 255, 255))
+
+        controls_1 = font.render("WASD - mover", True, (180, 180, 180))
+        controls_2 = font.render("Mouse - mirar", True, (180, 180, 180))
+        controls_3 = font.render("R - recarregar", True, (180, 180, 180))
+
+        screen.blit(title, (WIDTH // 2 - 140, HEIGHT // 2 - 140))
+        screen.blit(subtitle, (WIDTH // 2 - 110, HEIGHT // 2 - 90))
+
+        screen.blit(start_text, (WIDTH // 2 - 150, HEIGHT // 2))
+
+        screen.blit(controls_1, (WIDTH // 2 - 80, HEIGHT // 2 + 70))
+        screen.blit(controls_2, (WIDTH // 2 - 80, HEIGHT // 2 + 100))
+        screen.blit(controls_3, (WIDTH // 2 - 80, HEIGHT // 2 + 130))
 
     pygame.display.update()
     clock.tick(60)
