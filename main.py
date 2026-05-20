@@ -205,10 +205,33 @@ def create_enemy(x, y, enemy_type):
     }
 
 enemies = [
-    create_enemy(400, 250, "normal")
+
+    # Entrada
+    create_enemy(320, 128, "normal"),
+
+    # Corredores
+    create_enemy(512, 192, "normal"),
+    create_enemy(640, 256, "fast"),
+
+    # Storage
+    create_enemy(768, 384, "normal"),
+    create_enemy(832, 448, "fast"),
+
+    # Laboratório
+    create_enemy(512, 640, "tank"),
+    create_enemy(704, 640, "normal"),
+
+    # Containment
+    create_enemy(960, 768, "fast"),
+    create_enemy(1024, 832, "tank"),
+
+    # Core Chamber
+    create_enemy(1088, 960, "tank"),
 ]
 
 pickups = []
+
+enemy_projectiles = []
 
 weapon_pickups = [
     {
@@ -240,6 +263,26 @@ def wall_collision(x, y):
         return True
 
     return game_map[map_y][map_x] == "1"
+
+def can_see_enemy(enemy_x, enemy_y):
+    dx = enemy_x - player_x
+    dy = enemy_y - player_y
+
+    distance = math.sqrt(dx * dx + dy * dy)
+
+    steps = int(distance / 5)
+
+    if steps <= 0:
+        return True
+
+    for i in range(steps):
+        check_x = player_x + (dx / steps) * i
+        check_y = player_y + (dy / steps) * i
+
+        if wall_collision(check_x, check_y):
+            return False
+
+    return True
 
 def cast_rays(horizon_y):
     start_angle = player_angle - HALF_FOV
@@ -308,6 +351,9 @@ def move_enemies():
         distance = math.sqrt(dx * dx + dy * dy)
 
         if distance > 0:
+            attack_distance = 220
+
+        if distance > attack_distance:
             move_x = (dx / distance) * enemy["speed"]
             move_y = (dy / distance) * enemy["speed"]
 
@@ -323,11 +369,86 @@ def move_enemies():
         if enemy["cooldown"] > 0:
             enemy["cooldown"] -= 1
 
-        if distance < 25 and enemy["cooldown"] == 0:
-            player_health -= enemy["damage"]
-            damage_flash = 10
-            enemy["cooldown"] = 30
+        if distance < 260 and enemy["cooldown"] == 0:
+            if can_see_enemy(enemy["x"], enemy["y"]):
+                enemy_shoot(enemy)
+                enemy["cooldown"] = 90
 
+def enemy_shoot(enemy):
+    dx = player_x - enemy["x"]
+    dy = player_y - enemy["y"]
+
+    distance = math.sqrt(dx * dx + dy * dy)
+
+    if distance == 0:
+        return
+
+    speed = 4
+
+    enemy_projectiles.append({
+        "x": enemy["x"],
+        "y": enemy["y"],
+        "dx": (dx / distance) * speed,
+        "dy": (dy / distance) * speed,
+        "damage": enemy["damage"]
+    })
+
+
+def update_enemy_projectiles():
+    global player_health, damage_flash
+
+    to_remove = []
+
+    for projectile in enemy_projectiles:
+        projectile["x"] += projectile["dx"]
+        projectile["y"] += projectile["dy"]
+
+        if wall_collision(projectile["x"], projectile["y"]):
+            to_remove.append(projectile)
+            continue
+
+        dx = projectile["x"] - player_x
+        dy = projectile["y"] - player_y
+
+        distance = math.sqrt(dx * dx + dy * dy)
+
+        if distance < 20:
+            player_health -= projectile["damage"]
+            damage_flash = 10
+            to_remove.append(projectile)
+
+    for projectile in to_remove:
+        if projectile in enemy_projectiles:
+            enemy_projectiles.remove(projectile)
+
+def draw_enemy_projectiles(horizon_y):
+    for projectile in enemy_projectiles:
+        dx = projectile["x"] - player_x
+        dy = projectile["y"] - player_y
+
+        distance = math.sqrt(dx * dx + dy * dy)
+
+        angle = math.atan2(dy, dx) - player_angle
+
+        while angle > math.pi:
+            angle -= 2 * math.pi
+
+        while angle < -math.pi:
+            angle += 2 * math.pi
+
+        if -HALF_FOV < angle < HALF_FOV and distance > 10:
+            screen_x = (WIDTH // 2) + (angle / DELTA_ANGLE) * SCALE
+
+            size = int(SCREEN_DIST / (distance + 0.0001) * 8)
+
+            screen_y = horizon_y - size // 2
+
+            pygame.draw.circle(
+                screen,
+                (255, 80, 80),
+                (int(screen_x), int(screen_y)),
+                max(2, size)
+            )
 # def choose_enemy_type():
 #     if wave >= 6:
 #         return random.choice(["normal", "fast", "tank"])
@@ -451,7 +572,11 @@ def draw_enemies(horizon_y):
         while angle < -math.pi:
             angle += 2 * math.pi
 
-        if -HALF_FOV < angle < HALF_FOV and distance > 20:
+        if (
+            -HALF_FOV < angle < HALF_FOV
+            and distance > 20
+            and can_see_enemy(enemy["x"], enemy["y"])
+        ):
             visible_enemies.append((distance, angle, enemy))
 
     visible_enemies.sort(reverse=True, key=lambda item: item[0])
@@ -957,6 +1082,7 @@ while running:
             player_y = new_y
 
         move_enemies()
+        update_enemy_projectiles()
         update_pickups()
         update_weapon_pickups()
         update_core_zone()
@@ -1000,6 +1126,7 @@ while running:
 
     cast_rays(horizon_y)
     draw_enemies(horizon_y)
+    draw_enemy_projectiles(horizon_y)
     draw_pickups(horizon_y)
     draw_weapon_pickups(horizon_y)
     draw_minimap()
