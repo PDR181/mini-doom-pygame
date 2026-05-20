@@ -34,6 +34,7 @@ player_health = 100
 score = 0
 game_won = False
 game_started = False
+game_paused = False
 damage_flash = 0
 hit_feedback = 0
 
@@ -61,21 +62,70 @@ else:
 
 TILE_SIZE = 64
 
-wall_texture = pygame.image.load("assets/textures/wall.png").convert()
-wall_texture = pygame.transform.scale(wall_texture, (64, 64))
+wall_texture = pygame.image.load(
+    "assets/textures/wall.png"
+).convert()
+wall_texture = pygame.transform.scale(
+    wall_texture,
+    (32, 32))
 enemy_sprite = pygame.image.load(
     "assets/sprites/enemy_normal.png"
 ).convert_alpha()
 
-FOV = math.pi / 3.5
+pistol_sprite = pygame.image.load(
+    "assets/sprites/weapons/pistol.png"
+).convert_alpha()
+
+shotgun_sprite = pygame.image.load(
+    "assets/sprites/weapons/shotgun.png"
+).convert_alpha()
+
+shotgun_sprite = pygame.transform.scale(
+    shotgun_sprite,
+    (320, 320)
+)
+
+rifle_sprite = pygame.image.load(
+    "assets/sprites/weapons/rifle.png"
+).convert_alpha()
+
+rifle_sprite = pygame.transform.scale(
+    rifle_sprite,
+    (320, 320)
+)
+
+pistol_sprite = pygame.transform.scale(
+    pistol_sprite,
+    (320, 320)
+)
+
+ammo_sprite = pygame.image.load(
+    "assets/sprites/pickups/ammo.png"
+).convert_alpha()
+
+ammo_sprite = pygame.transform.scale(
+    ammo_sprite,
+    (48, 48)
+)
+
+medkit_sprite = pygame.image.load(
+    "assets/sprites/pickups/medkit.png"
+).convert_alpha()
+
+medkit_sprite = pygame.transform.scale(
+    medkit_sprite,
+    (48, 48)
+)
+
+FOV = math.pi / 4.2
 HALF_FOV = FOV / 2
-NUM_RAYS = 90
+NUM_RAYS = 80
 MAX_DEPTH = 500
 DELTA_ANGLE = FOV / NUM_RAYS
-SCREEN_DIST = (WIDTH / 2) / math.tan(HALF_FOV)
+SCREEN_DIST = ((WIDTH / 2) / math.tan(HALF_FOV)) * 0.8
 SCALE = WIDTH // NUM_RAYS
 
-MINIMAP_SCALE = 0.2
+MINIMAP_SCALE = 0.14
 
 shooting = False
 shoot_timer = 0
@@ -87,7 +137,7 @@ ammo = MAX_AMMO
 
 reloading = False
 reload_timer = 0
-RELOAD_DURATION = 90
+RELOAD_DURATION = 40
 weapon_cooldown = 0
 WEAPON_COOLDOWN_TIME = 15
 
@@ -96,7 +146,7 @@ current_weapon = "pistol"
 weapons = {
     "pistol": {
         "damage": 25,
-        "cooldown": 15,
+        "cooldown": 4,
         "ammo": 12,
         "color": (80, 80, 80),
         "automatic": False
@@ -124,7 +174,7 @@ weapons = {
 MAX_AMMO = weapons[current_weapon]["ammo"]
 ammo = MAX_AMMO
 
-owned_weapons = ["pistol"]
+owned_weapons = ["pistol", "rifle", "shotgun"]
 
 enemy_hit_damage = 25
 
@@ -168,6 +218,7 @@ def create_enemy(x, y, enemy_type):
             "max_health": 60,
             "alive": True,
             "cooldown": 0,
+            "dropped_loot": False,
             "type": "fast",
             "speed": 2.0,
             "damage": 8,
@@ -183,6 +234,7 @@ def create_enemy(x, y, enemy_type):
             "max_health": 180,
             "alive": True,
             "cooldown": 0,
+            "dropped_loot": False,
             "type": "tank",
             "speed": 0.8,
             "damage": 15,
@@ -197,6 +249,7 @@ def create_enemy(x, y, enemy_type):
         "max_health": 100,
         "alive": True,
         "cooldown": 0,
+        "dropped_loot": False,
         "type": "normal",
         "speed": 1.2,
         "damage": 10,
@@ -233,19 +286,7 @@ pickups = []
 
 enemy_projectiles = []
 
-weapon_pickups = [
-    {
-        "x": 768,
-        "y": 384,
-        "weapon": "rifle"
-    },
-
-    {
-        "x": 960,
-        "y": 768,
-        "weapon": "shotgun"
-    }
-]
+weapon_pickups = []
 
 core_zone = {
     "x": 1088,
@@ -270,7 +311,7 @@ def can_see_enemy(enemy_x, enemy_y):
 
     distance = math.sqrt(dx * dx + dy * dy)
 
-    steps = int(distance / 5)
+    steps = int(distance / 2)
 
     if steps <= 0:
         return True
@@ -302,7 +343,10 @@ def cast_rays(horizon_y):
 
             if game_map[row][col] == "1":
                 corrected_depth = depth * math.cos(player_angle - ray_angle)
-                wall_height = (TILE_SIZE / (corrected_depth + 0.0001)) * SCREEN_DIST
+                wall_height = min(
+                    HEIGHT * 0.9,
+                    (TILE_SIZE / (corrected_depth + 0.0001)) * (SCREEN_DIST * 0.45)
+                )
 
                 color_value = max(20, 255 - corrected_depth // 2)
                 color = (color_value, color_value, color_value)
@@ -312,24 +356,26 @@ def cast_rays(horizon_y):
                 else:
                     texture_x = int(target_x % TILE_SIZE)
 
+                slice_width = 1
+
                 texture_column = wall_texture.subsurface(
-                    texture_x,
+                    (texture_x % 30),
                     0,
-                    1,
-                    TILE_SIZE
+                    slice_width,
+                    32
                 )
 
                 texture_column = pygame.transform.scale(
                     texture_column,
-                    (max(1, SCALE), int(wall_height))
+                    (max(2, SCALE + 1), int(wall_height))
                 )
 
-                #shade = max(40, 255 - int(corrected_depth * 0.35))
+                shade = max(40, 255 - int(corrected_depth * 0.15))
 
-                #texture_column.fill(
-                #    (shade, shade, shade),
-                #    special_flags=pygame.BLEND_MULT
-                #)
+                # texture_column.fill(
+                #     (shade, shade, shade),
+                #     special_flags=pygame.BLEND_MULT
+                # )
 
                 screen.blit(
                     texture_column,
@@ -338,6 +384,20 @@ def cast_rays(horizon_y):
                         horizon_y - wall_height // 2
                     )
                 )
+
+                # darkness = pygame.Surface((max(1, SCALE), int(wall_height)))
+                # fog_alpha = min(220, int(corrected_depth * 0.7))
+
+                # darkness.set_alpha(fog_alpha)
+                # darkness.fill((0, 0, 0))
+
+                # screen.blit(
+                #     darkness,
+                #     (
+                #         ray * SCALE,
+                #         horizon_y - wall_height // 2
+                #     )
+                # )
 
 def move_enemies():
     global player_health, damage_flash
@@ -375,6 +435,9 @@ def move_enemies():
                 enemy["cooldown"] = 90
 
 def enemy_shoot(enemy):
+    if not can_see_enemy(enemy["x"], enemy["y"]):
+        return
+
     dx = player_x - enemy["x"]
     dy = player_y - enemy["y"]
 
@@ -439,15 +502,47 @@ def draw_enemy_projectiles(horizon_y):
         if -HALF_FOV < angle < HALF_FOV and distance > 10:
             screen_x = (WIDTH // 2) + (angle / DELTA_ANGLE) * SCALE
 
-            size = int(SCREEN_DIST / (distance + 0.0001) * 8)
+            size = int(SCREEN_DIST / (distance + 0.0001) * 4)
 
             screen_y = horizon_y - size // 2
 
+            outer_size = max(2, size + 1)
+            inner_size = max(1, size // 2)
+
+            # brilho externo
             pygame.draw.circle(
                 screen,
-                (255, 80, 80),
+                (255, 40, 40),
                 (int(screen_x), int(screen_y)),
-                max(2, size)
+                outer_size + 4
+            )
+
+            # camada média
+            pygame.draw.circle(
+                screen,
+                (255, 120, 120),
+                (int(screen_x), int(screen_y)),
+                outer_size
+            )
+
+            # núcleo
+            pygame.draw.circle(
+                screen,
+                (255, 255, 255),
+                (int(screen_x), int(screen_y)),
+                inner_size
+            )
+
+            # rastro
+            trail_x = int(screen_x - projectile["dx"] * 3)
+            trail_y = int(screen_y - projectile["dy"] * 3)
+
+            pygame.draw.line(
+                screen,
+                (255, 80, 80),
+                (trail_x, trail_y),
+                (int(screen_x), int(screen_y)),
+                3
             )
 # def choose_enemy_type():
 #     if wave >= 6:
@@ -629,21 +724,35 @@ def draw_pickups(horizon_y):
         if -HALF_FOV < angle < HALF_FOV and distance > 20:
             screen_x = (WIDTH // 2) + (angle / DELTA_ANGLE) * SCALE
 
-            size = int(SCREEN_DIST / (distance + 0.0001) * 20)
+            size = int(SCREEN_DIST / (distance + 0.0001) * 10)
 
             screen_y = horizon_y - size // 2 + 40
 
-            color = (50, 200, 255)
+            pickup_size = max(18, size * 2)
 
-            if pickup["type"] == "medkit":
-                color = (50, 255, 50)
+            if pickup["type"] == "ammo":
 
-            pygame.draw.circle(
-                screen,
-                color,
-                (int(screen_x), int(screen_y)),
-                max(4, size)
-            )
+                sprite = ammo_sprite
+
+                screen.blit(
+                    sprite,
+                    (
+                        int(screen_x - pickup_size // 2),
+                        int(screen_y - pickup_size // 2)
+                    )
+                )
+
+            elif pickup["type"] == "medkit":
+
+                sprite = medkit_sprite
+
+                screen.blit(
+                    sprite,
+                    (
+                        int(screen_x - pickup_size // 2),
+                        int(screen_y - pickup_size // 2)
+                    )
+                )
 
 def update_pickups():
     global ammo, player_health
@@ -686,7 +795,7 @@ def draw_weapon_pickups(horizon_y):
         if -HALF_FOV < angle < HALF_FOV and distance > 20:
             screen_x = (WIDTH // 2) + (angle / DELTA_ANGLE) * SCALE
 
-            size = int(SCREEN_DIST / (distance + 0.0001) * 18)
+            size = int(SCREEN_DIST / (distance + 0.0001) * 10)
 
             screen_y = horizon_y - size // 2 + 40
 
@@ -804,62 +913,83 @@ def draw_crosshair():
     pygame.draw.line(screen, color, (center_x, center_y - 10), (center_x, center_y + 10), 2)
 
 def draw_weapon():
-    weapon_width = 140
-    weapon_height = 90
-
-    weapon_x = WIDTH // 2 - weapon_width // 2
-    weapon_y = HEIGHT - weapon_height - 20
+    weapon_x = WIDTH // 2 - 160
+    weapon_y = HEIGHT - 260
 
     if shooting:
-        weapon_y += 10
+        weapon_y += 12
 
     if reloading:
         weapon_y += 35
 
-    weapon_color = weapons[current_weapon]["color"]
+    if current_weapon == "pistol":
+        screen.blit(
+            pistol_sprite,
+            (weapon_x, weapon_y)
+        )
 
-    pygame.draw.rect(
-        screen,
-        weapon_color,
-        (weapon_x, weapon_y, weapon_width, weapon_height)
-)
-    pygame.draw.rect(screen, (40, 40, 40), (weapon_x + 20, weapon_y + 20, 100, 50))
+    elif current_weapon == "rifle":
+        screen.blit(
+            rifle_sprite,
+            (weapon_x, weapon_y)
+        )
 
-    barrel_width = 50 if current_weapon == "shotgun" else 30
-    barrel_height = 40 if current_weapon == "shotgun" else 60
-    barrel_x = WIDTH // 2 - barrel_width // 2
-    barrel_y = weapon_y - 20
-
-    pygame.draw.rect(screen, (120, 120, 120), (barrel_x, barrel_y, barrel_width, barrel_height))
+    elif current_weapon == "shotgun":
+        screen.blit(
+            shotgun_sprite,
+            (weapon_x, weapon_y)
+        )
 
     if shooting:
-        flash_size = 20
         flash_x = WIDTH // 2
-        flash_y = barrel_y - 10
+        flash_y = weapon_y + 40
 
-        pygame.draw.circle(screen, (255, 220, 100), (flash_x, flash_y), flash_size)
-        pygame.draw.circle(screen, (255, 255, 180), (flash_x, flash_y), flash_size // 2)
+        pygame.draw.circle(
+            screen,
+            (255, 180, 60),
+            (flash_x, flash_y),
+            28
+        )
+
+        pygame.draw.circle(
+            screen,
+            (255, 255, 220),
+            (flash_x, flash_y),
+            14
+        )
 
 def draw_hud():
+    ambient_overlay = pygame.Surface((WIDTH, HEIGHT))
+    ambient_overlay.set_alpha(18)
+    ambient_overlay.fill((120, 0, 0))
+
+    screen.blit(ambient_overlay, (0, 0))
     health_text = font.render(f"Vida: {player_health}", True, (255, 255, 255))
-    enemies_alive = sum(1 for enemy in enemies if enemy["alive"])
-    enemy_text = font.render(f"Inimigos: {enemies_alive}", True, (255, 255, 255))
     score_text = font.render(f"Pontos: {score}", True, (255, 255, 255))
     #wave_text = font.render(f"Wave: {wave}", True, (255, 255, 255))
     ammo_text = font.render(f"Municao: {ammo}/{MAX_AMMO}", True, (255, 255, 255))
     weapon_text = font.render(f"Arma: {current_weapon.upper()}", True, (255, 255, 255))
 
-    screen.blit(health_text, (10, HEIGHT - 35))
-    screen.blit(enemy_text, (10, HEIGHT - 65))
-    screen.blit(score_text, (10, HEIGHT - 95))
-    #screen.blit(wave_text, (10, HEIGHT - 125))
-    screen.blit(ammo_text, (10, HEIGHT - 125))
-    screen.blit(weapon_text, (10, HEIGHT - 155))
+    hud_surface = pygame.Surface((WIDTH, 70))
+    hud_surface.set_alpha(170)
+    hud_surface.fill((10, 10, 10))
 
-    if reloading:
-        reload_text = font.render("RECARREGANDO...", True, (255, 220, 50))
-        screen.blit(reload_text, (WIDTH // 2 - 110, HEIGHT - 60))
+    screen.blit(hud_surface, (0, HEIGHT - 70))
 
+    pygame.draw.line(
+        screen,
+        (120, 0, 0),
+        (0, HEIGHT - 70),
+        (WIDTH, HEIGHT - 70),
+        3
+    )
+
+    screen.blit(health_text, (30, HEIGHT - 48))
+    screen.blit(ammo_text, (250, HEIGHT - 48))
+    screen.blit(score_text, (470, HEIGHT - 48))
+    screen.blit(weapon_text, (650, HEIGHT - 48))
+
+    
 def shoot_enemy():
     global score, hit_feedback
 
@@ -890,18 +1020,11 @@ def shoot_enemy():
         _, enemy = visible_targets[0]
 
         if current_weapon == "shotgun":
-            pellets = weapons[current_weapon]["pellets"]
 
-            total_damage = 0
-
-            for _ in range(pellets):
-                spread = random.uniform(
-                    -weapons[current_weapon]["spread"],
-                    weapons[current_weapon]["spread"]
-                )
-
-                if abs(enemy_angle + spread) < aim_tolerance:
-                    total_damage += weapons[current_weapon]["damage"]
+            total_damage = (
+                weapons[current_weapon]["damage"] *
+                weapons[current_weapon]["pellets"]
+            )
 
             enemy["health"] -= total_damage
 
@@ -917,15 +1040,22 @@ def shoot_enemy():
             enemy["alive"] = False
             score += 100
 
-        if random.random() < 0.4:
-            spawn_pickup(enemy["x"], enemy["y"])
+        if not enemy["dropped_loot"]:
+            if random.random() < 0.4:
+                spawn_pickup(enemy["x"], enemy["y"])
+
+            enemy["dropped_loot"] = True
 
 def reset_game():
     global player_x, player_y, player_angle, player_pitch
-    global player_health, score, game_won, game_started
+    global player_health, score, game_won
+    global game_started, game_paused
     global damage_flash, hit_feedback
     global shooting, shoot_timer
     global enemies
+    global pickups
+    global weapon_pickups
+    global enemy_projectiles
     global ammo, reloading, reload_timer
     global weapon_cooldown
     global mouse_held
@@ -939,6 +1069,7 @@ def reset_game():
     score = 0
     game_won = False
     game_started = False
+    game_paused = False
     damage_flash = 0
     hit_feedback = 0
 
@@ -949,6 +1080,12 @@ def reset_game():
     reloading = False
     reload_timer = 0
     weapon_cooldown = 0
+
+    pickups = []
+
+    enemy_projectiles = []
+
+    weapon_pickups = []
 
     
     enemies = [
@@ -1004,11 +1141,24 @@ while running:
                 mouse_held = False
 
         if event.type == pygame.KEYDOWN:
+            
+            if event.key == pygame.K_ESCAPE and game_started:
+                game_paused = not game_paused
+            
+            if game_paused:
+
+                if event.key == pygame.K_r:
+                    reset_game()
+
+                if event.key == pygame.K_q:
+                    pygame.quit()
+                    sys.exit()
+
             if not game_started:
                 if event.key == pygame.K_RETURN:
                     game_started = True
 
-            if event.key == pygame.K_r and player_health <= 0:
+            if event.key == pygame.K_r and (player_health <= 0 or game_won):
                 reset_game()
             if event.key == pygame.K_r and ammo < MAX_AMMO and not reloading and player_health > 0:
                 reloading = True
@@ -1035,7 +1185,7 @@ while running:
                 if ammo > MAX_AMMO:
                     ammo = MAX_AMMO
 
-    if player_health > 0 and game_started and not game_won:
+    if player_health > 0 and game_started and not game_won and not game_paused:
         mouse_dx, mouse_dy = pygame.mouse.get_rel()
 
         player_angle += mouse_dx * mouse_sensitivity
@@ -1122,7 +1272,35 @@ while running:
     screen.fill((0, 0, 0))
 
     pygame.draw.rect(screen, (30, 30, 30), (0, 0, WIDTH, horizon_y))
-    pygame.draw.rect(screen, (60, 60, 60), (0, horizon_y, WIDTH, HEIGHT - horizon_y))
+    
+    for y in range(horizon_y, HEIGHT):
+
+        distance_factor = (y - horizon_y) / (HEIGHT - horizon_y + 0.0001)
+
+        brightness = max(
+            8,
+            int(110 - distance_factor * 95)
+        )
+
+        pygame.draw.line(
+            screen,
+            (
+            brightness // 2,
+            brightness // 4,
+            brightness // 5
+        ),
+            (0, y),
+            (WIDTH, y)
+        )
+
+        if y % 10 == 0:
+            pygame.draw.line(
+                screen,
+                (brightness + 15, brightness // 2, brightness // 3),
+                (0, y),
+                (WIDTH, y),
+                1
+            )
 
     cast_rays(horizon_y)
     draw_enemies(horizon_y)
@@ -1147,11 +1325,94 @@ while running:
         screen.blit(overlay, (0, 0))
 
     if player_health <= 0:
-        game_over_text = font.render("GAME OVER", True, (255, 50, 50))
-        restart_text = font.render("Pressione R para reiniciar", True, (255, 255, 255))
+        overlay = pygame.Surface((WIDTH, HEIGHT))
+        overlay.set_alpha(220)
+        overlay.fill((0, 0, 0))
 
-        screen.blit(game_over_text, (WIDTH // 2 - 70, HEIGHT // 2 - 30))
-        screen.blit(restart_text, (WIDTH // 2 - 130, HEIGHT // 2 + 10))
+        screen.blit(overlay, (0, 0))
+
+        title_font = pygame.font.SysFont("arial", 56, bold=True)
+
+        game_over_title = title_font.render(
+            "SYSTEM FAILURE",
+            True,
+            (255, 50, 50)
+        )
+
+        subtitle_text = font.render(
+            "Hellcore containment lost.",
+            True,
+            (220, 220, 220)
+        )
+
+        restart_text = font.render(
+            "Pressione R para reiniciar",
+            True,
+            (255, 255, 255)
+        )
+
+        quit_text = font.render(
+            "Pressione Q para sair",
+            True,
+            (180, 180, 180)
+        )
+
+        screen.blit(
+            game_over_title,
+            (WIDTH // 2 - 220, HEIGHT // 2 - 120)
+        )
+
+        screen.blit(
+            subtitle_text,
+            (WIDTH // 2 - 140, HEIGHT // 2 - 40)
+        )
+
+        screen.blit(
+            restart_text,
+            (WIDTH // 2 - 140, HEIGHT // 2 + 30)
+        )
+
+        screen.blit(
+            quit_text,
+            (WIDTH // 2 - 100, HEIGHT // 2 + 70)
+        )
+
+    if game_won:
+        overlay = pygame.Surface((WIDTH, HEIGHT))
+        overlay.set_alpha(220)
+        overlay.fill((0, 0, 0))
+        screen.blit(overlay, (0, 0))
+
+        title_font = pygame.font.SysFont("arial", 56, bold=True)
+
+        victory_title = title_font.render(
+            "MISSION COMPLETE",
+            True,
+            (255, 60, 60)
+        )
+
+        victory_subtitle = font.render(
+            "Hellcore containment restored.",
+            True,
+            (220, 220, 220)
+        )
+
+        score_text = font.render(
+            f"Pontuacao Final: {score}",
+            True,
+            (255, 255, 255)
+        )
+
+        restart_text = font.render(
+            "Pressione R para jogar novamente",
+            True,
+            (200, 200, 200)
+        )
+
+        screen.blit(victory_title, (WIDTH // 2 - 220, HEIGHT // 2 - 120))
+        screen.blit(victory_subtitle, (WIDTH // 2 - 170, HEIGHT // 2 - 40))
+        screen.blit(score_text, (WIDTH // 2 - 100, HEIGHT // 2 + 20))
+        screen.blit(restart_text, (WIDTH // 2 - 170, HEIGHT // 2 + 80))
 
     if not game_started:
         overlay = pygame.Surface((WIDTH, HEIGHT))
@@ -1177,6 +1438,59 @@ while running:
         screen.blit(controls_1, (WIDTH // 2 - 80, HEIGHT // 2 + 70))
         screen.blit(controls_2, (WIDTH // 2 - 80, HEIGHT // 2 + 100))
         screen.blit(controls_3, (WIDTH // 2 - 80, HEIGHT // 2 + 130))
+
+    if game_paused:
+        overlay = pygame.Surface((WIDTH, HEIGHT))
+        overlay.set_alpha(190)
+        overlay.fill((0, 0, 0))
+
+        screen.blit(overlay, (0, 0))
+
+        title_font = pygame.font.SysFont("arial", 52, bold=True)
+
+        pause_title = title_font.render(
+            "PAUSED",
+            True,
+            (255, 60, 60)
+        )
+
+        continue_text = font.render(
+            "ESC - continuar",
+            True,
+            (255, 255, 255)
+        )
+
+        restart_text = font.render(
+            "R - reiniciar",
+            True,
+            (255, 255, 255)
+        )
+
+        quit_text = font.render(
+            "Q - sair",
+            True,
+            (255, 255, 255)
+        )
+
+        screen.blit(
+            pause_title,
+            (WIDTH // 2 - 110, HEIGHT // 2 - 120)
+        )
+
+        screen.blit(
+            continue_text,
+            (WIDTH // 2 - 90, HEIGHT // 2 - 30)
+        )
+
+        screen.blit(
+            restart_text,
+            (WIDTH // 2 - 90, HEIGHT // 2 + 10)
+        )
+
+        screen.blit(
+            quit_text,
+            (WIDTH // 2 - 90, HEIGHT // 2 + 50)
+        )
 
     pygame.display.update()
     clock.tick(60)
