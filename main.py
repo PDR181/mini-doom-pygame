@@ -133,7 +133,6 @@ mouse_held = False
 SHOOT_DURATION = 8
 
 MAX_AMMO = 30
-ammo = MAX_AMMO
 
 reloading = False
 reload_timer = 0
@@ -172,7 +171,20 @@ weapons = {
 }
 
 MAX_AMMO = weapons[current_weapon]["ammo"]
-ammo = MAX_AMMO
+weapon_ammo = {
+    "pistol": {
+        "magazine": 12,
+        "reserve": 24
+    },
+    "rifle": {
+        "magazine": 30,
+        "reserve": 60
+    },
+    "shotgun": {
+        "magazine": 6,
+        "reserve": 12
+    }
+}
 
 owned_weapons = ["pistol", "rifle", "shotgun"]
 
@@ -755,7 +767,7 @@ def draw_pickups(horizon_y):
                 )
 
 def update_pickups():
-    global ammo, player_health
+    global player_health
 
     collected = []
 
@@ -767,7 +779,9 @@ def update_pickups():
 
         if distance < 30:
             if pickup["type"] == "ammo":
-                ammo = min(MAX_AMMO, ammo + 6)
+                weapon_ammo["pistol"]["reserve"] += 12
+                weapon_ammo["rifle"]["reserve"] += 24
+                weapon_ammo["shotgun"]["reserve"] += 4
 
             elif pickup["type"] == "medkit":
                 player_health = min(100, player_health + 25)
@@ -851,6 +865,22 @@ def update_core_zone():
         game_won = True
 
 def draw_minimap():
+
+    map_width = len(game_map[0]) * TILE_SIZE * MINIMAP_SCALE
+    map_height = len(game_map) * TILE_SIZE * MINIMAP_SCALE
+
+    pygame.draw.rect(
+        screen,
+        (15, 15, 15),
+        (0, 0, map_width + 10, map_height + 10)
+    )
+
+    pygame.draw.rect(
+        screen,
+        (180, 30, 30),
+        (0, 0, map_width + 10, map_height + 10),
+        2
+    )
     for row_index, row in enumerate(game_map):
         for col_index, tile in enumerate(row):
             color = (200, 200, 200) if tile == "1" else (40, 40, 40)
@@ -859,8 +889,8 @@ def draw_minimap():
                 screen,
                 color,
                 (
-                    col_index * TILE_SIZE * MINIMAP_SCALE,
-                    row_index * TILE_SIZE * MINIMAP_SCALE,
+                    5 + col_index * TILE_SIZE * MINIMAP_SCALE,
+                    5 + row_index * TILE_SIZE * MINIMAP_SCALE,
                     TILE_SIZE * MINIMAP_SCALE,
                     TILE_SIZE * MINIMAP_SCALE
                 )
@@ -964,17 +994,45 @@ def draw_hud():
     ambient_overlay.fill((120, 0, 0))
 
     screen.blit(ambient_overlay, (0, 0))
-    health_text = font.render(f"Vida: {player_health}", True, (255, 255, 255))
-    score_text = font.render(f"Pontos: {score}", True, (255, 255, 255))
+    health_text = font.render(
+        f"♥ {player_health}",
+        True,
+        (220, 50, 50)
+    )
+    score_text = font.render(
+        f"SCORE {score}",
+        True,
+        (120, 220, 255)
+    )
     #wave_text = font.render(f"Wave: {wave}", True, (255, 255, 255))
-    ammo_text = font.render(f"Municao: {ammo}/{MAX_AMMO}", True, (255, 255, 255))
-    weapon_text = font.render(f"Arma: {current_weapon.upper()}", True, (255, 255, 255))
+    current_mag = weapon_ammo[current_weapon]["magazine"]
+    current_reserve = weapon_ammo[current_weapon]["reserve"]
+
+    ammo_text = font.render(
+        f"AMMO {current_mag}/{current_reserve}",
+        True,
+        (255, 220, 70)
+    )
+    weapon_font = pygame.font.SysFont("arial", 28, bold=True)
+
+    weapon_text = weapon_font.render(
+        current_weapon.upper(),
+        True,
+        (255, 255, 255)
+    )
 
     hud_surface = pygame.Surface((WIDTH, 70))
     hud_surface.set_alpha(170)
-    hud_surface.fill((10, 10, 10))
+    hud_surface.fill((20, 20, 20))
 
     screen.blit(hud_surface, (0, HEIGHT - 70))
+    
+    pygame.draw.rect(
+        screen,
+        (180, 30, 30),
+        (0, HEIGHT - 70, WIDTH, 70),
+        2
+    )
 
     pygame.draw.line(
         screen,
@@ -984,10 +1042,25 @@ def draw_hud():
         3
     )
 
-    screen.blit(health_text, (30, HEIGHT - 48))
-    screen.blit(ammo_text, (250, HEIGHT - 48))
-    screen.blit(score_text, (470, HEIGHT - 48))
-    screen.blit(weapon_text, (650, HEIGHT - 48))
+    screen.blit(health_text, (25, HEIGHT - 48))
+    screen.blit(ammo_text, (200, HEIGHT - 48))
+    screen.blit(score_text, (430, HEIGHT - 48))
+    screen.blit(weapon_text, (620, HEIGHT - 52))
+
+    if (
+        weapon_ammo[current_weapon]["magazine"] == 0
+        and weapon_ammo[current_weapon]["reserve"] == 0
+    ):
+        no_ammo = font.render(
+            "SEM MUNICAO",
+            True,
+            (255, 60, 60)
+        )
+
+        screen.blit(
+            no_ammo,
+            (WIDTH // 2 - 80, HEIGHT - 100)
+        )
 
     
 def shoot_enemy():
@@ -1056,7 +1129,7 @@ def reset_game():
     global pickups
     global weapon_pickups
     global enemy_projectiles
-    global ammo, reloading, reload_timer
+    global weapon_ammo, reloading, reload_timer
     global weapon_cooldown
     global mouse_held
 
@@ -1076,7 +1149,20 @@ def reset_game():
     shooting = False
     shoot_timer = 0
     mouse_held = False
-    ammo = MAX_AMMO
+    weapon_ammo = {
+        "pistol": {
+            "magazine": 12,
+            "reserve": 24
+        },
+        "rifle": {
+            "magazine": 30,
+            "reserve": 60
+        },
+        "shotgun": {
+            "magazine": 6,
+            "reserve": 12
+        }
+    }
     reloading = False
     reload_timer = 0
     weapon_cooldown = 0
@@ -1124,14 +1210,14 @@ while running:
                 mouse_held = True
 
                 if not weapons[current_weapon]["automatic"]:
-                    if not shooting and player_health > 0 and ammo > 0 and not reloading and weapon_cooldown <= 0:
+                    if not shooting and player_health > 0 and weapon_ammo[current_weapon]["magazine"] > 0 and not reloading and weapon_cooldown <= 0:
                         shooting = True
                         shoot_timer = SHOOT_DURATION
 
                         if shoot_sound:
                             shoot_sound.play()
 
-                        ammo -= 1
+                        weapon_ammo[current_weapon]["magazine"] -= 1
                         weapon_cooldown = weapons[current_weapon]["cooldown"]
 
                         shoot_enemy()
@@ -1160,7 +1246,14 @@ while running:
 
             if event.key == pygame.K_r and (player_health <= 0 or game_won):
                 reset_game()
-            if event.key == pygame.K_r and ammo < MAX_AMMO and not reloading and player_health > 0:
+            if (
+                event.key == pygame.K_r
+                and weapon_ammo[current_weapon]["magazine"] < MAX_AMMO
+                and weapon_ammo[current_weapon]["reserve"] > 0
+                and weapon_ammo[current_weapon]["magazine"] > 0
+                and not reloading
+                and player_health > 0
+            ):
                 reloading = True
                 reload_timer = RELOAD_DURATION
             
@@ -1168,22 +1261,19 @@ while running:
                 current_weapon = "pistol"
                 MAX_AMMO = weapons[current_weapon]["ammo"]
 
-                if ammo > MAX_AMMO:
-                    ammo = MAX_AMMO
+        
 
             if event.key == pygame.K_2 and "rifle" in owned_weapons:
                 current_weapon = "rifle"
                 MAX_AMMO = weapons[current_weapon]["ammo"]
 
-                if ammo > MAX_AMMO:
-                    ammo = MAX_AMMO
+                
 
             if event.key == pygame.K_3 and "shotgun" in owned_weapons:
                 current_weapon = "shotgun"
                 MAX_AMMO = weapons[current_weapon]["ammo"]
 
-                if ammo > MAX_AMMO:
-                    ammo = MAX_AMMO
+                
 
     if player_health > 0 and game_started and not game_won and not game_paused:
         mouse_dx, mouse_dy = pygame.mouse.get_rel()
@@ -1199,14 +1289,14 @@ while running:
         new_y = player_y
 
         if weapons[current_weapon]["automatic"]:
-            if mouse_held and ammo > 0 and not reloading and weapon_cooldown <= 0:
+            if mouse_held and weapon_ammo[current_weapon]["magazine"] > 0 and not reloading and weapon_cooldown <= 0:
                 shooting = True
                 shoot_timer = SHOOT_DURATION
 
                 if shoot_sound:
                     shoot_sound.play()
 
-                ammo -= 1
+                weapon_ammo[current_weapon]["magazine"] -= 1
                 weapon_cooldown = weapons[current_weapon]["cooldown"]
 
                 shoot_enemy()
@@ -1260,11 +1350,29 @@ while running:
         reload_timer -= 1
 
         if reload_timer <= 0:
-            ammo = MAX_AMMO
+            magazine = weapon_ammo[current_weapon]["magazine"]
+            reserve = weapon_ammo[current_weapon]["reserve"]
+
+            needed = MAX_AMMO - magazine
+            loaded = min(needed, reserve)
+
+            weapon_ammo[current_weapon]["magazine"] += loaded
+            weapon_ammo[current_weapon]["reserve"] -= loaded
+
             reloading = False
     
     if weapon_cooldown > 0:
         weapon_cooldown -= 1
+    current_mag = weapon_ammo[current_weapon]["magazine"]
+    current_reserve = weapon_ammo[current_weapon]["reserve"]
+
+    if (
+        current_mag == 0
+        and current_reserve > 0
+        and not reloading
+    ):
+        reloading = True
+        reload_timer = RELOAD_DURATION
     
     horizon_offset = int(player_pitch * 200)
     horizon_y = HEIGHT // 2 + horizon_offset
@@ -1415,29 +1523,84 @@ while running:
         screen.blit(restart_text, (WIDTH // 2 - 170, HEIGHT // 2 + 80))
 
     if not game_started:
+
         overlay = pygame.Surface((WIDTH, HEIGHT))
-        overlay.fill((0, 0, 0))
+        overlay.fill((8, 8, 8))
         screen.blit(overlay, (0, 0))
 
-        title_font = pygame.font.SysFont("arial", 52, bold=True)
+        title_font = pygame.font.SysFont("arial", 64, bold=True)
+        subtitle_font = pygame.font.SysFont("arial", 28, bold=True)
+        info_font = pygame.font.SysFont("arial", 22)
 
-        title = title_font.render("HELLCORE", True, (255, 50, 50))
-        subtitle = font.render("Containment Breach", True, (200, 200, 200))
+        title = title_font.render(
+            "HELLCORE",
+            True,
+            (220, 40, 40)
+        )
 
-        start_text = font.render("Pressione ENTER para iniciar", True, (255, 255, 255))
+        subtitle = subtitle_font.render(
+            "CONTAINMENT BREACH",
+            True,
+            (180, 180, 180)
+        )
 
-        controls_1 = font.render("WASD - mover", True, (180, 180, 180))
-        controls_2 = font.render("Mouse - mirar", True, (180, 180, 180))
-        controls_3 = font.render("R - recarregar", True, (180, 180, 180))
+        start = subtitle_font.render(
+            "PRESSIONE ENTER PARA INICIAR",
+            True,
+            (255, 255, 255)
+        )
 
-        screen.blit(title, (WIDTH // 2 - 140, HEIGHT // 2 - 140))
-        screen.blit(subtitle, (WIDTH // 2 - 110, HEIGHT // 2 - 90))
+        controls_title = subtitle_font.render(
+            "CONTROLES",
+            True,
+            (220, 40, 40)
+        )
 
-        screen.blit(start_text, (WIDTH // 2 - 150, HEIGHT // 2))
+        c1 = info_font.render("W A S D      - Movimentar", True, (220,220,220))
+        c2 = info_font.render("Mouse       - Mirar", True, (220,220,220))
+        c3 = info_font.render("Clique Esq. - Atirar", True, (220,220,220))
+        c4 = info_font.render("R           - Recarregar", True, (220,220,220))
+        c5 = info_font.render("1 2 3       - Trocar arma", True, (220,220,220))
+        c6 = info_font.render("ESC         - Pausar", True, (220,220,220))
 
-        screen.blit(controls_1, (WIDTH // 2 - 80, HEIGHT // 2 + 70))
-        screen.blit(controls_2, (WIDTH // 2 - 80, HEIGHT // 2 + 100))
-        screen.blit(controls_3, (WIDTH // 2 - 80, HEIGHT // 2 + 130))
+        objective = subtitle_font.render(
+            "OBJETIVO",
+            True,
+            (220,40,40)
+        )
+
+        o1 = info_font.render(
+            "Elimine os inimigos e alcance",
+            True,
+            (220,220,220)
+        )
+
+        o2 = info_font.render(
+            "o nucleo da instalacao.",
+            True,
+            (220,220,220)
+        )
+
+        screen.blit(title, (WIDTH//2 - title.get_width()//2, 55))
+        screen.blit(subtitle, (WIDTH//2 - subtitle.get_width()//2, 130))
+
+        pygame.draw.line(screen, (120,0,0), (150,175), (650,175), 2)
+
+        screen.blit(start, (WIDTH//2 - start.get_width()//2, 205))
+
+        pygame.draw.line(screen, (120,0,0), (150,255), (650,255), 2)
+
+        screen.blit(controls_title, (70,300))
+        screen.blit(c1, (70,340))
+        screen.blit(c2, (70,370))
+        screen.blit(c3, (70,400))
+        screen.blit(c4, (70,430))
+        screen.blit(c5, (70,460))
+        screen.blit(c6, (70,490))
+
+        screen.blit(objective, (470,300))
+        screen.blit(o1, (470,340))
+        screen.blit(o2, (470,370))
 
     if game_paused:
         overlay = pygame.Surface((WIDTH, HEIGHT))
